@@ -41,6 +41,8 @@ class T2G_VertexePickerTool(QgsMapTool):
             return
         if layer is None:
             return
+        if layer.type() == QgsMapLayerType.RasterLayer:
+            return
         self.geometryType = layer.geometryType()
         geometry = self.rubberBand.asGeometry()
         self.rubberBand.reset(self.geometryType)
@@ -61,9 +63,10 @@ class T2G_VertexePickerTool(QgsMapTool):
             vertex = T2G_Vertex(label, source, x, y, z)
         adjusted = self.vertexList.append(vertex)
         self.rubberBand.addPoint(adjusted.getQgsPointXY(), True)
-        index = len(self.markers)
-        self.markers.append(adjusted.getMarker(self.canvas))
-        self.parent.dlg.vertexTableView.selectRow(index)
+        # TODO: getMarker() does not exist anymore
+        # index = len(self.markers)
+        # self.markers.append(adjusted.getMarker(self.canvas))
+        # self.parent.dlg.vertexTableView.selectRow(index)
 
         
     def deleteVertex(self):

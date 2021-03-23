@@ -10,7 +10,7 @@
 name=Tachy2GIS-3DViewer
 qgisMinimumVersion=3.0
 description=This plugin allows to create geometries directly with a connected tachymeter
-version=1.0.0
+version=1.0.1
 author=Christian Trapp
 email=mail@christiantrapp.net
 

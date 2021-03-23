@@ -156,6 +156,44 @@ class VtkPolyLayer(MixinSingle, Mixin2D, VtkLayer):
         featureEdges.SetInputData(poly_data)
         featureEdges.Update()
 
+        # glyph3D object (cross)
+        pt = vtk.vtkPoints()
+        pt.SetDataTypeToDouble()
+        cells = vtk.vtkCellArray()
+        pts = [(-0.05, 0.05, 0.05), (0.05, -0.05, -0.05),
+               (-0.05, -0.05, 0.05), (0.05, 0.05, -0.05),
+               (0.05, 0.05, 0.05), (-0.05, -0.05, -0.05),
+               (0.05, -0.05, 0.05), (-0.05, 0.05, -0.05)]
+
+        index = 0
+        for lines in range(4):
+            line = vtk.vtkPolyLine()
+            for point in range(index, index+2):
+                line.GetPointIds().InsertNextId(index)
+                pt.InsertNextPoint(pts[index])
+                index += 1
+            cells.InsertNextCell(line)
+
+        glyphData = vtk.vtkPolyData()
+        glyphData.SetPoints(pt)
+        glyphData.SetLines(cells)
+
+        # glyph3D vertex marker
+        vtxGlyphs = vtk.vtkGlyph3D()
+        vtxGlyphs.SetSourceData(glyphData)
+        vtxGlyphs.SetInputData(poly_data)
+        vtxGlyphs.Update()
+
+        vtxMapper = vtk.vtkPolyDataMapper()
+        vtxMapper.SetInputConnection(vtxGlyphs.GetOutputPort())
+
+        vtxActor = vtk.vtkActor()
+        vtxActor.SetMapper(vtxMapper)
+        vtxActor.PickableOff()
+        vtxActor.VisibilityOff()
+        vtxActor.GetProperty().SetLineWidth(2)
+        vtxActor.GetProperty().SetColor(1.0, 0.0, 0.0)
+
         edgeMapper = vtk.vtkPolyDataMapper()
         edgeMapper.SetInputConnection(featureEdges.GetOutputPort())
         edgeActor = vtk.vtkActor()
@@ -172,8 +210,8 @@ class VtkPolyLayer(MixinSingle, Mixin2D, VtkLayer):
         actor.SetMapper(poly_mapper)
         actor.GetProperty().SetColor(colour)
 
-        self.vtkActor = actor, edgeActor
-        return [actor, edgeActor]
+        self.vtkActor = actor, edgeActor, vtxActor
+        return [actor, edgeActor, vtxActor]
 
 
 class VtkPolygonLayer(VtkPolyLayer):
@@ -226,8 +264,46 @@ class VtkLineLayer(VtkLayer):
         lineActor.GetProperty().SetColor(colour)
         lineActor.GetProperty().SetLineWidth(3)
 
-        self.vtkActor = lineActor
-        return [lineActor]
+        # glyph3D object (cross)
+        pt = vtk.vtkPoints()
+        pt.SetDataTypeToDouble()
+        cells = vtk.vtkCellArray()
+        pts = [(-0.05, 0.05, 0.05), (0.05, -0.05, -0.05),
+               (-0.05, -0.05, 0.05), (0.05, 0.05, -0.05),
+               (0.05, 0.05, 0.05), (-0.05, -0.05, -0.05),
+               (0.05, -0.05, 0.05), (-0.05, 0.05, -0.05)]
+
+        index = 0
+        for lines in range(4):
+            line = vtk.vtkPolyLine()
+            for point in range(index, index+2):
+                line.GetPointIds().InsertNextId(index)
+                pt.InsertNextPoint(pts[index])
+                index += 1
+            cells.InsertNextCell(line)
+
+        glyphData = vtk.vtkPolyData()
+        glyphData.SetPoints(pt)
+        glyphData.SetLines(cells)
+
+        # glyph3D vertex marker
+        vtxGlyphs = vtk.vtkGlyph3D()
+        vtxGlyphs.SetSourceData(glyphData)
+        vtxGlyphs.SetInputData(poly_data)
+        vtxGlyphs.Update()
+
+        vtxMapper = vtk.vtkPolyDataMapper()
+        vtxMapper.SetInputConnection(vtxGlyphs.GetOutputPort())
+
+        vtxActor = vtk.vtkActor()
+        vtxActor.SetMapper(vtxMapper)
+        vtxActor.PickableOff()
+        vtxActor.VisibilityOff()
+        vtxActor.GetProperty().SetLineWidth(2)
+        vtxActor.GetProperty().SetColor(1.0, 0.0, 0.0)
+
+        self.vtkActor = lineActor, vtxActor
+        return [lineActor, vtxActor]
 
 
 class VtkLineStringLayer(VtkLineLayer):
@@ -404,8 +480,9 @@ class trackingCall(QObject):
 class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
     def __init__(self, parent=None):
         self.trackingCall = trackingCall()
-        self.AddObserver("RightButtonPressEvent", self.right_button_press_event)
-        # self.AddObserver("MouseMoveEvent", self.mouse_move_event)
+        # float = priority (0.0 = lowest)
+        self.AddObserver("RightButtonPressEvent", self.right_button_press_event, 1.0)
+        # self.AddObserver("MouseMoveEvent", self.mouse_move_event, 0.0)
         # self.AddObserver("RightButtonReleaseEvent", self.right_button_release_event)
         self.default_color = (0.0, 1.0, 1.0)
         self.select_color = (1.0, 0.2, 0.2)
@@ -492,6 +569,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
             self.poly_line_actor.SetMapper(lineMapper)
             self.poly_line_actor.GetProperty().SetColor(1.0, 0.0, 0.0)
             self.poly_line_actor.GetProperty().SetLineWidth(3)
+            # self.poly_line_actor.GetProperty().RenderLinesAsTubesOn()  # prevents z-fighting
             self.poly_line_actor.PickableOff()
 
         # Create bigger, self.select_color selection point
@@ -549,12 +627,24 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         self.OnRightButtonUp()
         return
 
+    # todo: Blocking camera movement? (left click, middle click)
     def OnMouseMove(self):
         clickPos = self.GetInteractor().GetEventPosition()
-        picker = vtk.vtkPointPicker()
-        picker.SetTolerance(0)
+        # picker = vtk.vtkPointPicker()
+        # picker.SetTolerance(0)
+        # picked = picker.GetPickPosition()
+
+        # get closest point
+        # kdLoc = vtk.vtkKdTreePointLocator()
+
+        # get actor on mouse over - only picks PickableOn()
+        picker = vtk.vtkPropPicker()
         picker.Pick(clickPos[0], clickPos[1], 0, self.GetCurrentRenderer())
-        picked = picker.GetPickPosition()
+        picked = picker.GetActor()
+        if picked is not None:
+            print(picked)
+        return
+
 
     def mouse_move_event(self, obj, event):
         self.OnMouseMove()

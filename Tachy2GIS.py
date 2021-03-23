@@ -55,7 +55,7 @@ from .Tachy2GIS_dialog import Tachy2GisDialog
 from .T2G.autoZoomer import ExtentProvider, AutoZoomer
 from .T2G.geo_com import connect_beep
 from .T2G.GSI_Parser import make_vertex
-from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkLineLayer, VtkLayer
+from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkLineLayer, VtkLayer, VtkPolyLayer
 
 def make_axes_actor(scale, xyzLabels):
     axes = vtk.vtkAxesActor()
@@ -252,6 +252,10 @@ class Tachy2Gis:
         gc.collect()
         print('Signals disconnected!')
 
+    # switch target layer to source layer when changing source layer
+    def switchTargetLayer(self):
+        self.dlg.targetLayerComboBox.setLayer(self.dlg.sourceLayerComboBox.currentLayer())
+
     def setActiveLayer(self):
         if Qt is None:
             return
@@ -321,7 +325,7 @@ class Tachy2Gis:
                                                          self.vtk_mouse_interactor_style.vertices[-1][1],
                                                          self.vtk_mouse_interactor_style.vertices[-1][2],
                                                          self.vtk_mouse_interactor_style.vertices[-1][2])
-                    self.vtk_widget.renderer.GetActiveCamera().Zoom(3)
+                    # self.vtk_widget.renderer.GetActiveCamera().Zoom(3)
                     self.vtk_widget.renderer.ResetCameraClippingRange()
                     self.vtk_widget.renderer.GetRenderWindow().Render()
         elif index == 1:  # Layer
@@ -566,17 +570,17 @@ class Tachy2Gis:
         self.vtk_widget.renderer.GetRenderWindow().Render()
         del progress
 
-# TODO: Set colors for active or inactive layers?
+# TODO: Cleanup
     def setPickable(self):
         currentLayer = self.dlg.sourceLayerComboBox.currentLayer()
         if currentLayer is None:
-            currentLayer = self.dlg.sourceLayerComboBox.additionalItems()
+            return
         for ids, layer in self.vtk_widget.layers.items():
             if type(currentLayer) == list:
                 if " ⛅   "+ids in currentLayer:
                     layer.PickableOn()
                 continue
-            if currentLayer.type() == QgsMapLayerType.RasterLayer:
+            if currentLayer.type() == QgsMapLayerType.RasterLayer:  # skip raster
                 continue
             if currentLayer.geometryType() == QgsWkbTypes.NullGeometry:  # excel sheet
                 continue
@@ -585,20 +589,25 @@ class Tachy2Gis:
                 layer.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
                 continue
             if not ids == currentLayer.id():
-                if type(layer.vtkActor) == tuple:
+                if isinstance(layer, VtkPolyLayer):
                     for actor in layer.vtkActor:
                         actor.PickableOff()
+                    layer.vtkActor[-1].VisibilityOff()
                     layer.vtkActor[0].GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
                 else:
                     if isinstance(layer, VtkLineLayer):
-                        layer.vtkActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Black"))
+                        layer.vtkActor[-1].VisibilityOff()
+                        layer.vtkActor[0].GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Black"))
+                        layer.vtkActor[0].PickableOff()
+                        layer.vtkActor[-1].PickableOff()
+                        continue
                     else:
                         layer.vtkActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
                     layer.vtkActor.PickableOff()
             else:
                 if type(layer.vtkActor) == tuple:
-                    for actor in layer.vtkActor:
-                        actor.PickableOn()
+                    layer.vtkActor[0].PickableOn()
+                    layer.vtkActor[-1].VisibilityOn()  # show poly markers
                     layer.vtkActor[0].GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Yellow"))
                 else:
                     layer.vtkActor.PickableOn()
@@ -633,6 +642,7 @@ class Tachy2Gis:
         self.dlg.sourceLayerComboBox.setExcludedProviders(["delimitedtext"])
         self.dlg.sourceLayerComboBox.setLayer(self.iface.activeLayer())
         self.dlg.sourceLayerComboBox.layerChanged.connect(self.setPickable)
+        self.dlg.sourceLayerComboBox.layerChanged.connect(self.switchTargetLayer)
 
         self.dlg.targetLayerComboBox.layerChanged.connect(self.setActiveLayer)
         self.dlg.targetLayerComboBox.setFilters(QgsMapLayerProxyModel.VectorLayer)
@@ -641,7 +651,7 @@ class Tachy2Gis:
         self.dlg.zoomResetButton.clicked.connect(self.resetVtkCameraTop)
 
         self.dlg.zoomModeComboBox.activated.connect(self.autozoom)
-        self.dlg.zoomModeComboBox.setCurrentIndex(0)
+        self.dlg.zoomModeComboBox.setCurrentIndex(6)  # start with autozoom off
 
         self.tachyReader.lineReceived.connect(self.vertex_received)
         self.tachyReader.serial_connected.connect(self.tachyConnected)

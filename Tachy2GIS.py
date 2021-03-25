@@ -325,7 +325,7 @@ class Tachy2Gis:
                                                          self.vtk_mouse_interactor_style.vertices[-1][1],
                                                          self.vtk_mouse_interactor_style.vertices[-1][2],
                                                          self.vtk_mouse_interactor_style.vertices[-1][2])
-                    # self.vtk_widget.renderer.GetActiveCamera().Zoom(3)
+                    self.vtk_widget.renderer.GetActiveCamera().Zoom(3)
                     self.vtk_widget.renderer.ResetCameraClippingRange()
                     self.vtk_widget.renderer.GetRenderWindow().Render()
         elif index == 1:  # Layer

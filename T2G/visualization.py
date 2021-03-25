@@ -49,6 +49,26 @@ class VtkLayer:
         self.anchors = self.extractor.anchors
         self.geometries = self.extractor.geometries
         self.poly_data = self.extractor.poly_data
+        # glyph3D object (cross)
+        self.glyphPt = vtk.vtkPoints()
+        self.glyphPt.SetDataTypeToDouble()
+        self.glyphCells = vtk.vtkCellArray()
+        self.glyphPts = [(-0.05, 0.05, 0.05), (0.05, -0.05, -0.05),
+                         (-0.05, -0.05, 0.05), (0.05, 0.05, -0.05),
+                         (0.05, 0.05, 0.05), (-0.05, -0.05, -0.05),
+                         (0.05, -0.05, 0.05), (-0.05, 0.05, -0.05)]
+        self.glyphData = vtk.vtkPolyData()
+        self.glyphData.SetPoints(self.glyphPt)
+        self.glyphData.SetLines(self.glyphCells)
+
+        index = 0
+        for lines in range(4):
+            glyphLine = vtk.vtkPolyLine()
+            for point in range(index, index+2):
+                glyphLine.GetPointIds().InsertNextId(index)
+                self.glyphPt.InsertNextPoint(self.glyphPts[index])
+                index += 1
+            self.glyphCells.InsertNextCell(glyphLine)
 
     def update(self):
         self.poly_data = self.extractor.startExtraction()
@@ -156,31 +176,12 @@ class VtkPolyLayer(MixinSingle, Mixin2D, VtkLayer):
         featureEdges.SetInputData(poly_data)
         featureEdges.Update()
 
-        # glyph3D object (cross)
-        pt = vtk.vtkPoints()
-        pt.SetDataTypeToDouble()
-        cells = vtk.vtkCellArray()
-        pts = [(-0.05, 0.05, 0.05), (0.05, -0.05, -0.05),
-               (-0.05, -0.05, 0.05), (0.05, 0.05, -0.05),
-               (0.05, 0.05, 0.05), (-0.05, -0.05, -0.05),
-               (0.05, -0.05, 0.05), (-0.05, 0.05, -0.05)]
-
-        index = 0
-        for lines in range(4):
-            line = vtk.vtkPolyLine()
-            for point in range(index, index+2):
-                line.GetPointIds().InsertNextId(index)
-                pt.InsertNextPoint(pts[index])
-                index += 1
-            cells.InsertNextCell(line)
-
-        glyphData = vtk.vtkPolyData()
-        glyphData.SetPoints(pt)
-        glyphData.SetLines(cells)
-
         # glyph3D vertex marker
         vtxGlyphs = vtk.vtkGlyph3D()
-        vtxGlyphs.SetSourceData(glyphData)
+        vtxGlyphs.SetOutputPointsPrecision(vtk.vtkAlgorithm.DOUBLE_PRECISION)
+        # todo: markers sometimes too small or too large
+        vtxGlyphs.SetScaleFactor(0.05)
+        vtxGlyphs.SetSourceData(self.glyphData)
         vtxGlyphs.SetInputData(poly_data)
         vtxGlyphs.Update()
 
@@ -264,31 +265,12 @@ class VtkLineLayer(VtkLayer):
         lineActor.GetProperty().SetColor(colour)
         lineActor.GetProperty().SetLineWidth(3)
 
-        # glyph3D object (cross)
-        pt = vtk.vtkPoints()
-        pt.SetDataTypeToDouble()
-        cells = vtk.vtkCellArray()
-        pts = [(-0.05, 0.05, 0.05), (0.05, -0.05, -0.05),
-               (-0.05, -0.05, 0.05), (0.05, 0.05, -0.05),
-               (0.05, 0.05, 0.05), (-0.05, -0.05, -0.05),
-               (0.05, -0.05, 0.05), (-0.05, 0.05, -0.05)]
-
-        index = 0
-        for lines in range(4):
-            line = vtk.vtkPolyLine()
-            for point in range(index, index+2):
-                line.GetPointIds().InsertNextId(index)
-                pt.InsertNextPoint(pts[index])
-                index += 1
-            cells.InsertNextCell(line)
-
-        glyphData = vtk.vtkPolyData()
-        glyphData.SetPoints(pt)
-        glyphData.SetLines(cells)
-
         # glyph3D vertex marker
         vtxGlyphs = vtk.vtkGlyph3D()
-        vtxGlyphs.SetSourceData(glyphData)
+        vtxGlyphs.SetOutputPointsPrecision(vtk.vtkAlgorithm.DOUBLE_PRECISION)
+        # todo: markers sometimes too small or too large
+        vtxGlyphs.SetScaleFactor(0.05)
+        vtxGlyphs.SetSourceData(self.glyphData)
         vtxGlyphs.SetInputData(poly_data)
         vtxGlyphs.Update()
 
@@ -483,7 +465,9 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         # float = priority (0.0 = lowest)
         self.AddObserver("RightButtonPressEvent", self.right_button_press_event, 1.0)
         # self.AddObserver("MouseMoveEvent", self.mouse_move_event, 0.0)
-        # self.AddObserver("RightButtonReleaseEvent", self.right_button_release_event)
+        # self.AddObserver("RightButtonReleaseEvent", self.right_button_release_event, 1.0)
+        # self.AddObserver("MouseWheelForwardEvent", self.mouse_wheel_forward_event, 1.0)
+        # self.AddObserver("MouseWheelBackwardEvent", self.mouse_wheel_backward_event, 1.0)
         self.default_color = (0.0, 1.0, 1.0)
         self.select_color = (1.0, 0.2, 0.2)
         self.vertices = []
@@ -645,7 +629,21 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
             print(picked)
         return
 
-
     def mouse_move_event(self, obj, event):
         self.OnMouseMove()
+        return
+
+    # todo: glyph3D scaling?
+    def OnMouseWheelForward(self):
+        pass
+
+    def OnMouseWheelBackward(self):
+        pass
+
+    def mouse_wheel_forward_event(self):
+        self.OnMouseWheelForward()
+        return
+
+    def mouse_wheel_backward_event(self):
+        self.OnMouseWheelBackward()
         return

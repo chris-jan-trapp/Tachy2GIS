@@ -36,6 +36,25 @@ class ColourProvider:
             return vtk.vtkNamedColors().GetColor3d(COLOUR_SPACE[self.index])
 
 
+class SimpleRingBuffer(list):
+    def __getitem__(self, item):
+        item = item % len(self)
+        return super(SimpleRingBuffer, self).__getitem__(item)
+
+    def slices(self, one_end, other_end):
+        i_start = self.index(one_end)
+        i_end = self.index(other_end)
+
+        one_way = [self[i] for i in range(i_start, i_end + 1)]
+        other_way = [self[i] for i in range(i_end, 2 * i_end + 1)]
+
+        return one_way, other_way
+
+    def slice(self, one_end, contains, other_end):
+        slices = self.slices(one_end, other_end)
+        return next(filter(lambda s: contains in s, slices))
+
+
 class VtkLayer:
     vtkActor = None
 
@@ -481,6 +500,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         self.actors = [self.vertices_actor,
                        self.selected_vertex_actor,
                        self.poly_line_actor]
+        self.last_source = None
 
     def initialize_geometry_info(self):
         self.vtk_points = vtk.vtkPoints()
@@ -493,6 +513,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
     def OnRightButtonDown(self):
         clickPos = self.GetInteractor().GetEventPosition()
         picker = vtk.vtkPointPicker()
+        cell_picker = vtkCellPicker()
         picker.SetTolerance(100)
         picker.Pick(clickPos[0], clickPos[1], 0, self.GetCurrentRenderer())
         picked = picker.GetPickPosition()
@@ -504,9 +525,32 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         # return if selection is not an actor
         if picked_actor is None:
             return
-        self.vertices.append(picked)
+        self.add_vertex(picked, picked_actor)
+        self.trackingCall.trackPoint.emit(0)
+
+    def add_vertex(self, vertex, source=None):
+        self.last_source = source
+        self.vertices.append(vertex)
         self.draw()
-        self.point_added.signal.emit()
+
+    def trace(self):
+        # We get the last three picked vertices
+        points = self.vertices[-3:]
+        if self.last_source && len(points) == 3:
+            """Now we want to get the segment that is defined by these three. For this we need the 
+            CELL representing the last touched geometry. 
+            We then get the vertices of that cell, simpleRingBuffer them and grab the segment with
+            segment = vertex_buffer.slice(*points) 
+            then we can:
+            self.vertices = self.vertices[:-3] + segment
+            
+            This will explode when the last three vertices have been picked from different features.
+            """
+            source_mapper = self.last_source.GetMapper()
+            point_data = source_mapper.GetInput()
+            # OK. And now the cell :(
+            vertex_buffer = SimpleRingBuffer(self.last_source.)
+            #
 
     def draw(self):
         for actor in self.actors:

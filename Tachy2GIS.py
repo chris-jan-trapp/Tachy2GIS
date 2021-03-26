@@ -151,7 +151,7 @@ class Tachy2Gis:
 
     def vertex_received(self, line):
         new_vtx = make_vertex(line)
-        self.vtk_mouse_interactor_style.vertices.append(new_vtx)
+        self.vtk_mouse_interactor_style.add_vertex(new_vtx)
         self.dlg.coords.setText(f"{new_vtx}")
         self.vtk_mouse_interactor_style.draw()
         self.autozoom(0)
@@ -227,6 +227,7 @@ class Tachy2Gis:
         self.dlg.tachy_connect_button.clicked.disconnect()
         self.dlg.logFileEdit.selectionChanged.disconnect()
         self.dlg.dumpButton.clicked.disconnect()
+        self.dlg.traceButton.clicked.disconnect()
         self.dlg.deleteVertexButton.clicked.disconnect()
         self.vtk_mouse_interactor_style.point_added.signal.disconnect(self.point_added)
         self.dlg.setRefHeight.returnPressed.disconnect()
@@ -432,6 +433,9 @@ class Tachy2Gis:
     def getRefHeight(self):
         self.dlg.setRefHeight.setText(self.tachyReader.getRefHeight)
 
+    def trace_shape(self):
+        pass
+
     # Testline XYZRGB: 32565837.246360727 5933518.657366993 2.063523623769514 255 255 255
     def loadPointCloud(self, cloudFileName=None, cloudId=None):
         if not cloudFileName:
@@ -551,6 +555,7 @@ class Tachy2Gis:
         self.dlg.dumpButton.clicked.connect(self.dump)
         self.dlg.deleteVertexButton.clicked.connect(self.vtk_mouse_interactor_style.remove_selected)
         self.dlg.loadPointCloud.clicked.connect(self.loadPointCloud)
+        self.dlg.traceButton.clicked.connect(self.trace_shape)
 
         # self.dlg.vertexTableView.setModel(self.vertexList)
         # self.dlg.vertexTableView.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)

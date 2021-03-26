@@ -455,13 +455,13 @@ class VtkWidget(QVTKRenderWindowInteractor):
 
 
 # call on right button down, to track last point
-class trackingCall(QObject):
-    trackPoint = pyqtSignal(int)
+class PointAdded(QObject):
+    signal = pyqtSignal()
 
 
 class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
     def __init__(self, parent=None):
-        self.trackingCall = trackingCall()
+        self.point_added = PointAdded()
         # float = priority (0.0 = lowest)
         self.AddObserver("RightButtonPressEvent", self.right_button_press_event, 1.0)
         # self.AddObserver("MouseMoveEvent", self.mouse_move_event, 0.0)
@@ -506,7 +506,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
             return
         self.vertices.append(picked)
         self.draw()
-        self.trackingCall.trackPoint.emit(0)
+        self.point_added.signal.emit()
 
     def draw(self):
         for actor in self.actors:
@@ -592,7 +592,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
             # working with the select_index allows to work with a wdget that allows selection of vertices.
             del self.vertices[self.select_index]
             self.draw()
-            self.trackingCall.trackPoint.emit(0)
+            self.point_added.signal.emit()
 
     def removeAllVertices(self):
         self.vertices = []

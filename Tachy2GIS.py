@@ -228,7 +228,7 @@ class Tachy2Gis:
         self.dlg.logFileEdit.selectionChanged.disconnect()
         self.dlg.dumpButton.clicked.disconnect()
         self.dlg.deleteVertexButton.clicked.disconnect()
-        self.vtk_mouse_interactor_style.trackingCall.trackPoint.disconnect(self.autozoom)
+        self.vtk_mouse_interactor_style.point_added.signal.disconnect(self.point_added)
         self.dlg.setRefHeight.returnPressed.disconnect()
         self.dlg.zoomResetButton.clicked.disconnect()
         self.availability_watchdog.serial_available.disconnect()
@@ -299,7 +299,11 @@ class Tachy2Gis:
         canvas.zoomToFullExtent()
         canvas.refresh()
 
-    def autozoom(self, index):
+    def autozoom(self, *args):
+        index = self.dlg.zoomModeComboBox.currentIndex()
+        if index == 6: # Off
+            return
+
         if self.dlg.sourceLayerComboBox.currentLayer() == self.dlg.targetLayerComboBox.currentLayer():
             current_layer = self.dlg.sourceLayerComboBox.currentLayer()
         else:
@@ -349,48 +353,28 @@ class Tachy2Gis:
             self.vtk_widget.renderer.ResetCameraClippingRange()
             self.vtk_widget.renderer.GetRenderWindow().Render()
 
-        elif index == 2:  # Last Feature
+        else: # 1-8 last features
             if not feats:
                 self.dlg.zoomModeComboBox.setCurrentIndex(1)
                 self.autozoom(1)
                 return
             featIds = [f.id() for f in feats]
-            if min(featIds) < 0:  # layers in edit buffer have ids below 0
-                index = featIds.index(min(featIds))
-            else:
-                index = -1
-            zVtx = []
-            for vtx in feats[index].geometry().vertices():
-                if not vtx.z() == vtx.z():
-                    zVtx.append(0)
-                    continue
-                zVtx.append(vtx.z())
-            self.vtk_widget.renderer.GetActiveCamera().SetViewUp(0, 1, 0)
-            self.vtk_widget.renderer.GetActiveCamera().SetPosition(0, 0, 0)
-            self.vtk_widget.renderer.GetActiveCamera().SetFocalPoint(0, 0, -1)
-            self.vtk_widget.renderer.ResetCamera(feats[index].geometry().boundingBox().xMinimum(),
-                                                 feats[index].geometry().boundingBox().xMaximum(),
-                                                 feats[index].geometry().boundingBox().yMinimum(),
-                                                 feats[index].geometry().boundingBox().yMaximum(),
-                                                 min(zVtx), max(zVtx))
-            self.vtk_widget.renderer.ResetCameraClippingRange()
-            self.vtk_widget.renderer.GetRenderWindow().Render()
+            count = {2:1,
+                     3:2,
+                     4:4,
+                     5:8}
+            zoom_to = count[index]
 
-        elif index == 3:  # Last 2 Features
-            if not feats or len(feats) < 2:
-                self.dlg.zoomModeComboBox.setCurrentIndex(1)
-                self.autozoom(1)
-                return
-            featIds = [f.id() for f in feats]
-            featIndices = []
-            for i in range(2):
-                if min(featIds) < 0:
-                    featIndices.append(featIds.index(min(featIds)))
-                    featIds[featIds.index(min(featIds))] = 0
-                else:
-                    featIndices.append(featIds.index(featIds[-1]))
-                    featIds.pop(-1)
+            buffered = sorted(filter(lambda id: id < 0, featIds))
+            to_focus = buffered[:zoom_to]
+            remaining = zoom_to - len(to_focus)
+            if remaining:
+                to_focus += featIds[-remaining:]
+
+            featIndices = [featIds.index(id) for id in to_focus]
+
             xMin, xMax, yMin, yMax, zVtx = [], [], [], [], []
+
             for idx in featIndices:
                 xMin.append(feats[idx].geometry().boundingBox().xMinimum())
                 yMin.append(feats[idx].geometry().boundingBox().yMinimum())
@@ -410,75 +394,9 @@ class Tachy2Gis:
             self.vtk_widget.renderer.ResetCameraClippingRange()
             self.vtk_widget.renderer.GetRenderWindow().Render()
 
-        elif index == 4:  # Last 4 Features
-            if not feats or len(feats) < 4:
-                self.dlg.zoomModeComboBox.setCurrentIndex(1)
-                self.autozoom(1)
-                return
-            featIds = [f.id() for f in feats]
-            featIndices = []
-            for i in range(4):
-                if min(featIds) < 0:
-                    featIndices.append(featIds.index(min(featIds)))
-                    featIds[featIds.index(min(featIds))] = 0
-                else:
-                    featIndices.append(featIds.index(featIds[-1]))
-                    featIds.pop(-1)
-            xMin, xMax, yMin, yMax, zVtx = [], [], [], [], []
-            for idx in featIndices:
-                xMin.append(feats[idx].geometry().boundingBox().xMinimum())
-                yMin.append(feats[idx].geometry().boundingBox().yMinimum())
-                xMax.append(feats[idx].geometry().boundingBox().xMaximum())
-                yMax.append(feats[idx].geometry().boundingBox().yMaximum())
-                for vtx in feats[idx].geometry().vertices():
-                    if not vtx.z() == vtx.z():
-                        zVtx.append(0)
-                        continue
-                    zVtx.append(vtx.z())
-            self.vtk_widget.renderer.GetActiveCamera().SetViewUp(0, 1, 0)
-            self.vtk_widget.renderer.GetActiveCamera().SetPosition(0, 0, 0)
-            self.vtk_widget.renderer.GetActiveCamera().SetFocalPoint(0, 0, -1)
-            self.vtk_widget.renderer.ResetCamera(min(xMin), max(xMax),
-                                                 min(yMin), max(yMax),
-                                                 min(zVtx), max(zVtx))
-            self.vtk_widget.renderer.ResetCameraClippingRange()
-            self.vtk_widget.renderer.GetRenderWindow().Render()
-
-        elif index == 5:  # Last 8 Features
-            if not feats or len(feats) < 8:
-                self.dlg.zoomModeComboBox.setCurrentIndex(1)
-                self.autozoom(1)
-                return
-            featIds = [f.id() for f in feats]
-            featIndices = []
-            for i in range(8):
-                if min(featIds) < 0:
-                    featIndices.append(featIds.index(min(featIds)))
-                    featIds[featIds.index(min(featIds))] = 0
-                else:
-                    featIndices.append(featIds.index(featIds[-1]))
-                    featIds.pop(-1)
-            xMin, xMax, yMin, yMax, zVtx = [], [], [], [], []
-            for idx in featIndices:
-                xMin.append(feats[idx].geometry().boundingBox().xMinimum())
-                yMin.append(feats[idx].geometry().boundingBox().yMinimum())
-                xMax.append(feats[idx].geometry().boundingBox().xMaximum())
-                yMax.append(feats[idx].geometry().boundingBox().yMaximum())
-                for vtx in feats[idx].geometry().vertices():
-                    if not vtx.z() == vtx.z():
-                        zVtx.append(0)
-                        continue
-                    zVtx.append(vtx.z())
-            self.vtk_widget.renderer.GetActiveCamera().SetViewUp(0, 1, 0)
-            self.vtk_widget.renderer.GetActiveCamera().SetPosition(0, 0, 0)
-            self.vtk_widget.renderer.GetActiveCamera().SetFocalPoint(0, 0, -1)
-            self.vtk_widget.renderer.ResetCamera(min(xMin), max(xMax),
-                                                 min(yMin), max(yMax),
-                                                 min(zVtx), max(zVtx))
-            self.vtk_widget.renderer.ResetCameraClippingRange()
-            self.vtk_widget.renderer.GetRenderWindow().Render()
-        elif index == 6:  # Off
-            return
+    def point_added(self):
+        if self.dlg.zoomModeComboBox.currentIndex() == 0:
+            self.autozoom()
 
     def set_tachy_button_text(self, txt):
         self.dlg.tachy_connect_button.text = txt
@@ -490,16 +408,17 @@ class Tachy2Gis:
 
     # TODO: Other views?
     def resetVtkCameraTop(self):
-        self.vtk_widget.renderer.GetActiveCamera().SetViewUp(0, 1, 0)
-        self.vtk_widget.renderer.GetActiveCamera().SetPosition(0, 0, 0)
-        self.vtk_widget.renderer.GetActiveCamera().SetFocalPoint(0, 0, -1)
+        active_camera = self.vtk_widget.renderer.GetActiveCamera()
+        active_camera.SetViewUp(0, 1, 0)
+        active_camera.SetPosition(0, 0, 0)
+        active_camera.SetFocalPoint(0, 0, -1)
         self.vtk_widget.renderer.ResetCamera(iface.mapCanvas().extent().xMinimum(),
                                              iface.mapCanvas().extent().xMaximum(),
                                              iface.mapCanvas().extent().yMinimum(),
                                              iface.mapCanvas().extent().yMaximum(),
                                              self.vtk_widget.renderer.ComputeVisiblePropBounds()[-2],
                                              self.vtk_widget.renderer.ComputeVisiblePropBounds()[-1])
-        self.vtk_widget.renderer.GetActiveCamera().Zoom(3)
+        active_camera.Zoom(3)
         self.vtk_widget.renderer.ResetCameraClippingRange()
         self.vtk_widget.renderer.GetRenderWindow().Render()
 
@@ -623,7 +542,7 @@ class Tachy2Gis:
         # self.dlg.request_mirror.clicked.connect(self.tachyReader.request_mirror_z)
         self.tachyReader.mirror_z_received.connect(self.getRefHeight)
         self.dlg.setRefHeight.returnPressed.connect(self.setRefHeight)
-        self.vtk_mouse_interactor_style.trackingCall.trackPoint.connect(self.autozoom)
+        self.vtk_mouse_interactor_style.point_added.signal.connect(self.point_added)
 
         self.dlg.logFileEdit.selectionChanged.connect(self.setLog)  # TODO: Only works by double clicking/dragging
 
@@ -643,6 +562,7 @@ class Tachy2Gis:
         self.dlg.sourceLayerComboBox.setLayer(self.iface.activeLayer())
         self.dlg.sourceLayerComboBox.layerChanged.connect(self.setPickable)
         self.dlg.sourceLayerComboBox.layerChanged.connect(self.switchTargetLayer)
+        self.dlg.sourceLayerComboBox.layerChanged.connect(self.autozoom)
 
         self.dlg.targetLayerComboBox.layerChanged.connect(self.setActiveLayer)
         self.dlg.targetLayerComboBox.setFilters(QgsMapLayerProxyModel.VectorLayer)
@@ -708,13 +628,19 @@ class Tachy2Gis:
             if layer.layer().geometryType == QgsWkbTypes.NullGeometry:
                 continue
             if layer.isVisible():
-                if layer.layer().id() not in self.vtk_widget.layers:
-                    if "⛅" in layer.layer().name():
-                        self.loadPointCloud(QgsExpressionContextUtils.layerScope(layer.layer()).variable('cloud_path'), layer.layer().id())
-                    else:
-                        self.vtk_widget.switch_layer(layer.layer())
+                if "⛅" in layer.layer().name():
+                    self.vtk_widget.layers[layer.layer().id()].vtkActor.VisibilityOn()
+                elif layer.layer().id() not in self.vtk_widget.layers:
+                    #if "⛅" in layer.layer().name():
+                    #    self.vtk_widget.layers[layer.layer().id()].vtkActor.VisibilityOn()
+                    #    # self.loadPointCloud(QgsExpressionContextUtils.layerScope(layer.layer()).variable('cloud_path'), layer.layer().id())
+                    #else:
+                    self.vtk_widget.switch_layer(layer.layer())
             else:  # remove actor from renderer and vtk_widget.layers{}
                 if layer.layer().id() in self.vtk_widget.layers:
+                    if "⛅" in layer.layer().name():
+                        self.vtk_widget.layers[layer.layer().id()].vtkActor.VisibilityOff()
+                        continue
                     if type(self.vtk_widget.layers[layer.layer().id()].vtkActor) == tuple:
                         for actor in self.vtk_widget.layers[layer.layer().id()].vtkActor:
                             self.vtk_widget.renderer.RemoveActor(actor)

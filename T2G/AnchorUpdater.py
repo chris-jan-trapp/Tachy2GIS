@@ -25,6 +25,7 @@ class VtkGeometry:
     # NULLGEOMETRY = 4
     # NOGEOMETRY = 100
 
+
 class AnchorUpdater(QObject):
     # The thread uses signals to communicate its progress to the AnchorUpdateDialog
     signalGeometriesProgress = pyqtSignal(int)

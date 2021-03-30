@@ -1,12 +1,16 @@
 import vtk
-from qgis.core import Qgis, QgsFeature, QgsGeometry, QgsWkbTypes, QgsMessageLog, QgsVectorDataProvider, QgsVectorLayerUtils
+from qgis.core import Qgis, QgsFeature, QgsGeometry, QgsWkbTypes, QgsMessageLog, QgsVectorDataProvider, \
+    QgsVectorLayerUtils, QgsVectorLayer, QgsExpressionContextUtils, QgsProject
 from qgis.gui import QgsAttributeDialog
 from qgis.utils import iface
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtWidgets import qApp
+from vtk.util.numpy_support import vtk_to_numpy
 
 from random import random
 from .AnchorUpdater import VtkAnchorUpdater
+from os.path import basename
 
 COLOUR_SPACE = ['blanched_almond',
                 'blue_medium',
@@ -22,6 +26,8 @@ COLOUR_SPACE = ['blanched_almond',
                 'manganese_blue',
                 'saddle_brown',
                 ]
+
+CLOUD_MARKER = "⛅ "
 
 
 class ColourProvider:
@@ -57,6 +63,7 @@ class SimpleRingBuffer(list):
 
 class VtkLayer:
     vtkActor = None
+    pickable_actor = None
 
     def __init__(self, qgs_layer):
         self.source_layer = qgs_layer
@@ -88,6 +95,12 @@ class VtkLayer:
                 self.glyphPt.InsertNextPoint(self.glyphPts[index])
                 index += 1
             self.glyphCells.InsertNextCell(glyphLine)
+
+    def set_pickability(self, pickable):
+        self.pickable_actor.PickableOn() if pickable else self.pickable_actor.PickableOff()
+
+    def set_highlight(self, highlighted):
+        raise NotImplementedError("Has to be implemented for each derived class")
 
     def update(self):
         self.poly_data = self.extractor.startExtraction()
@@ -173,6 +186,44 @@ class MixinM:
         return [f'{v[0]} {v[1]} {0.0}' for v in vertices]
 
 
+class VtkPointCloudLayer(VtkLayer):
+    def __init__(self, cloud_file_name, qgis_id):
+        #self.geoType =
+        cellIndex = 0
+        points = vtk.vtkPoints()
+        points.SetDataTypeToDouble()
+        cells = vtk.vtkCellArray()
+        colors = vtk.vtkUnsignedCharArray()
+        colors.SetNumberOfComponents(3)
+
+        with open(cloud_file_name, 'r', encoding="utf-8-sig") as file:
+            for line in file:
+                qApp.processEvents()
+                split = line.split()
+                pid = points.InsertNextPoint((float(split[0]), float(split[1]), float(split[2])))
+                cells.InsertNextCell(1, [pid])
+                colors.InsertTuple3(cellIndex, int(split[3]), int(split[4]), int(split[5]))
+                cellIndex += 1
+        polyData = vtk.vtkPolyData()
+        polyData.SetPoints(points)
+        polyData.SetVerts(cells)
+        polyData.GetPointData().SetScalars(colors)
+        pointMapper = vtk.vtkPolyDataMapper()
+        pointMapper.SetInputData(polyData)
+        pointMapper.Update()
+        pointActor = vtk.vtkActor()
+        pointActor.SetMapper(pointMapper)
+        pointActor.PickableOff()
+
+        self.vtkActor = pointActor
+        self.pickable_actor = pointActor
+        #self.id = "⛅ " + basename(cloud_file_name)[0]
+        self.id = qgis_id
+
+    def set_highlight(self, highlighted):
+        return
+
+
 class VtkPolyLayer(MixinSingle, Mixin2D, VtkLayer):
     def get_actors(self, colour):
         # poly_data = self.anchor_updater.layer_cache[self.source_layer.id]['poly_data']
@@ -189,7 +240,7 @@ class VtkPolyLayer(MixinSingle, Mixin2D, VtkLayer):
         featureEdges = vtk.vtkFeatureEdges()
         featureEdges.SetColoring(0)
         featureEdges.BoundaryEdgesOn()
-        featureEdges.FeatureEdgesOff()
+        featureEdges.FeatureEdgesOn()
         featureEdges.ManifoldEdgesOff()
         featureEdges.NonManifoldEdgesOff()
         featureEdges.SetInputData(poly_data)
@@ -229,9 +280,20 @@ class VtkPolyLayer(MixinSingle, Mixin2D, VtkLayer):
         actor = vtk.vtkActor()
         actor.SetMapper(poly_mapper)
         actor.GetProperty().SetColor(colour)
+        actor.PickableOff()
 
         self.vtkActor = actor, edgeActor, vtxActor
+        self.pickable_actor = edgeActor
         return [actor, edgeActor, vtxActor]
+
+    def set_highlight(self, highlighted):
+        actor, edgeActor, vtxActor = self.vtkActor
+        if highlighted:
+            actor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Yellow"))
+            vtxActor.VisibilityOn()
+        else:
+            actor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
+            vtxActor.VisibilityOff()
 
 
 class VtkPolygonLayer(VtkPolyLayer):
@@ -304,7 +366,17 @@ class VtkLineLayer(VtkLayer):
         vtxActor.GetProperty().SetColor(1.0, 0.0, 0.0)
 
         self.vtkActor = lineActor, vtxActor
+        self.pickable_actor = lineActor
         return [lineActor, vtxActor]
+
+    def set_highlight(self, highlighted):
+        lineActor, vtxActor = self.vtkActor
+        if highlighted:
+            vtxActor.VisibilityOn()
+            lineActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Yellow"))
+        else:
+            vtxActor.VisibilityOff()
+            lineActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Black"))
 
 
 class VtkLineStringLayer(VtkLineLayer):
@@ -377,7 +449,14 @@ class VtkPointLayer(VtkLayer):
         pointActor.GetProperty().SetColor(colour)
 
         self.vtkActor = pointActor
+        self.pickable_actor = pointActor
         return [pointActor]
+
+    def set_highlight(self, highlighted):
+        if highlighted:
+            self.vtkActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Yellow"))
+        else:
+            self.vtkActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
 
 
 class VtkWidget(QVTKRenderWindowInteractor):
@@ -513,12 +592,37 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
     def OnRightButtonDown(self):
         clickPos = self.GetInteractor().GetEventPosition()
         picker = vtk.vtkPointPicker()
-        cell_picker = vtkCellPicker()
+        cell_picker = vtk.vtkCellPicker()
         picker.SetTolerance(100)
         picker.Pick(clickPos[0], clickPos[1], 0, self.GetCurrentRenderer())
         picked = picker.GetPickPosition()
         picked_actor = picker.GetActor()
         print("vtkPointPicker picked: ", picked)
+
+        #cell_picker.Pick(*picked, self.GetCurrentRenderer())
+
+        # pick cell where point is picked
+        cell_picker.Pick3DRay(picked, (0, 0, 0, 0), self.GetCurrentRenderer())
+        # cell_picked = cell_picker.GetPickPosition()
+        # print("vtkCellPicker picked: ", cell_picked)
+        ids = vtk.vtkIdList()
+        print(cell_picker.GetActor())
+        if cell_picker.GetActor():
+            picked_cell = cell_picker.GetCellId()
+            #print("vtk picked_cell: ", picked_cell)
+            #print("picked_actor GetInput(): ", picked_actor.GetMapper().GetInput().GetCellPoints(picked_cell, c))
+            picked_cell_data = picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints().GetData()
+            picked_cell_data = picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints().GetData()
+            #print(dir(picked_actor.GetMapper().GetInput().GetPolys()))
+            # print(picked_actor.GetMapper().GetInput().GetPolys().GetCellSize(picked_cell))
+            # print(ids)
+            #print(picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints())
+            print("vTn: ", vtk_to_numpy(picked_cell_data))
+            #newIter = picked_actor.GetMapper().GetInput().GetPolys().NewIterator()
+            #print("NoP: ", picked_actor.GetMapper().GetInput().GetNumberOfVerts())
+
+
+
         # return if picked point already in vertices
         if picked in self.vertices:
             return
@@ -526,7 +630,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         if picked_actor is None:
             return
         self.add_vertex(picked, picked_actor)
-        self.trackingCall.trackPoint.emit(0)
+        self.point_added.signal.emit()
 
     def add_vertex(self, vertex, source=None):
         self.last_source = source
@@ -536,7 +640,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
     def trace(self):
         # We get the last three picked vertices
         points = self.vertices[-3:]
-        if self.last_source && len(points) == 3:
+        if self.last_source & len(points) == 3:
             """Now we want to get the segment that is defined by these three. For this we need the 
             CELL representing the last touched geometry. 
             We then get the vertices of that cell, simpleRingBuffer them and grab the segment with
@@ -549,8 +653,9 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
             source_mapper = self.last_source.GetMapper()
             point_data = source_mapper.GetInput()
             # OK. And now the cell :(
-            vertex_buffer = SimpleRingBuffer(self.last_source.)
+            # vertex_buffer = SimpleRingBuffer(self.last_source.)
             #
+        # self.draw()
 
     def draw(self):
         for actor in self.actors:

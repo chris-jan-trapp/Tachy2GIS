@@ -20,7 +20,7 @@
  *                                                                         *
  ***************************************************************************/
 """
-import os.path
+from os.path import basename
 from . import resources
 """
 import pydevd
@@ -52,10 +52,11 @@ from PyQt5 import QtCore, QtWidgets
 from .T2G.TachyReader import TachyReader, AvailabilityWatchdog
 from .FieldDialog import FieldDialog
 from .Tachy2GIS_dialog import Tachy2GisDialog
-from .T2G.autoZoomer import ExtentProvider, AutoZoomer
+# from .T2G.autoZoomer import ExtentProvider, AutoZoomer
 from .T2G.geo_com import connect_beep
 from .T2G.GSI_Parser import make_vertex
-from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkLineLayer, VtkLayer, VtkPolyLayer
+from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkPointCloudLayer
+
 
 def make_axes_actor(scale, xyzLabels):
     axes = vtk.vtkAxesActor()
@@ -437,7 +438,7 @@ class Tachy2Gis:
         pass
 
     # Testline XYZRGB: 32565837.246360727 5933518.657366993 2.063523623769514 255 255 255
-    def loadPointCloud(self, cloudFileName=None, cloudId=None):
+    def loadPointCloud(self, cloudFileName=None):
         if not cloudFileName:
             cloudFileName = QFileDialog.getOpenFileName(None,
                                                         'PointCloud laden...',
@@ -446,95 +447,39 @@ class Tachy2Gis:
                                                         '*.xyz;;*.txt')[0]
             if cloudFileName == '':
                 return
-        cellIndex = 0
-        points = vtk.vtkPoints()
-        points.SetDataTypeToDouble()
-        cells = vtk.vtkCellArray()
-        colors = vtk.vtkUnsignedCharArray()
-        colors.SetNumberOfComponents(3)
         progress = QProgressDialog(self.tr("Lade PointCloud..."), self.tr("Abbrechen"), 0, 0)
         progress.setWindowTitle(self.tr("PointCloud laden..."))
         progress.setCancelButton(None)
         progress.show()
-        with open(cloudFileName, 'r', encoding="utf-8-sig") as file:
-            for line in file:
-                qApp.processEvents()
-                split = line.split()
-                pid = points.InsertNextPoint((float(split[0]), float(split[1]), float(split[2])))
-                cells.InsertNextCell(1, [pid])
-                colors.InsertTuple3(cellIndex, int(split[3]), int(split[4]), int(split[5]))
-                cellIndex += 1
-        polyData = vtk.vtkPolyData()
-        polyData.SetPoints(points)
-        polyData.SetVerts(cells)
-        polyData.GetPointData().SetScalars(colors)
-        pointMapper = vtk.vtkPolyDataMapper()
-        pointMapper.SetInputData(polyData)
-        pointMapper.Update()
-        pointActor = vtk.vtkActor()
-        pointActor.SetMapper(pointMapper)
-        pointActor.PickableOff()
 
-        # todo: QgsPointCloudLayer will be added with QGIS 3.18
-        # create memory layer to allow handling of point cloud
-        if not cloudId:
-            pcLayer = QgsVectorLayer("PointZ", "⛅ " + os.path.basename(cloudFileName), "memory")
-            # todo: add point to zoom in?
-            QgsExpressionContextUtils.setLayerVariable(pcLayer, 'cloud_path', cloudFileName)
-            VtkPcLayer = VtkLayer(pcLayer)
-            VtkPcLayer.vtkActor = pointActor
-            self.vtk_widget.layers[pcLayer.id()] = VtkPcLayer
-            QgsProject.instance().addMapLayer(pcLayer)
-        else:
-            VtkPcLayer = VtkLayer(QgsProject.instance().mapLayersByName("⛅ " + os.path.basename(cloudFileName))[0])
-            VtkPcLayer.vtkActor = pointActor
-            self.vtk_widget.layers[cloudId] = VtkPcLayer
-        self.vtk_widget.renderer.AddActor(pointActor)
+        pcLayer = QgsVectorLayer("PointZ", "⛅ " + basename(cloudFileName), "memory")
+        QgsExpressionContextUtils.setLayerVariable(pcLayer, 'cloud_path', cloudFileName)
+        cloud_layer = VtkPointCloudLayer(cloudFileName, pcLayer.id())
+        self.vtk_widget.layers[cloud_layer.id] = cloud_layer
+        self.vtk_widget.renderer.AddActor(cloud_layer.vtkActor)
         self.vtk_widget.renderer.GetRenderWindow().Render()
+        QgsProject.instance().addMapLayer(pcLayer)
         del progress
 
-# TODO: Cleanup
     def setPickable(self):
-        currentLayer = self.dlg.sourceLayerComboBox.currentLayer()
-        if currentLayer is None:
+        source_layer = self.dlg.sourceLayerComboBox.currentLayer()
+        if source_layer is None:
             return
-        for ids, layer in self.vtk_widget.layers.items():
-            if type(currentLayer) == list:
-                if " ⛅   "+ids in currentLayer:
-                    layer.PickableOn()
+        for stuff in self.vtk_widget.layers.items():
+            qgs_id, layer = stuff[:2]
+            if len(stuff) > 2:
+                raise ValueError(f"Too much stuff: {str(stuff)} in {str(self.vtk_widget.layers)}")
+            if " ⛅   " + qgs_id in source_layer.id():
+                layer.PickableOn()
                 continue
-            if currentLayer.type() == QgsMapLayerType.RasterLayer:  # skip raster
+            if source_layer.type() == QgsMapLayerType.RasterLayer:  # skip raster
                 continue
-            if currentLayer.geometryType() == QgsWkbTypes.NullGeometry:  # excel sheet
+            if source_layer.geometryType() == QgsWkbTypes.NullGeometry:  # excel sheet
                 continue
-            if isinstance(layer, vtk.vtkActor):
-                layer.PickableOff()
-                layer.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
-                continue
-            if not ids == currentLayer.id():
-                if isinstance(layer, VtkPolyLayer):
-                    for actor in layer.vtkActor:
-                        actor.PickableOff()
-                    layer.vtkActor[-1].VisibilityOff()
-                    layer.vtkActor[0].GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
-                else:
-                    if isinstance(layer, VtkLineLayer):
-                        layer.vtkActor[-1].VisibilityOff()
-                        layer.vtkActor[0].GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Black"))
-                        layer.vtkActor[0].PickableOff()
-                        layer.vtkActor[-1].PickableOff()
-                        continue
-                    else:
-                        layer.vtkActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Orange"))
-                    layer.vtkActor.PickableOff()
-            else:
-                if type(layer.vtkActor) == tuple:
-                    layer.vtkActor[0].PickableOn()
-                    layer.vtkActor[-1].VisibilityOn()  # show poly markers
-                    layer.vtkActor[0].GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Yellow"))
-                else:
-                    layer.vtkActor.PickableOn()
-                    layer.vtkActor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Yellow"))
+
+            layer.set_pickability(qgs_id == source_layer.id())
+            layer.set_highlight(qgs_id == source_layer.id())
+
         self.vtk_widget.refresh_content()
 
     # Interface code goes here:

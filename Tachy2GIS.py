@@ -434,9 +434,6 @@ class Tachy2Gis:
     def getRefHeight(self):
         self.dlg.setRefHeight.setText(self.tachyReader.getRefHeight)
 
-    def trace_shape(self):
-        pass
-
     # Testline XYZRGB: 32565837.246360727 5933518.657366993 2.063523623769514 255 255 255
     def loadPointCloud(self, cloudFileName=None):
         if not cloudFileName:
@@ -500,7 +497,7 @@ class Tachy2Gis:
         self.dlg.dumpButton.clicked.connect(self.dump)
         self.dlg.deleteVertexButton.clicked.connect(self.vtk_mouse_interactor_style.remove_selected)
         self.dlg.loadPointCloud.clicked.connect(self.loadPointCloud)
-        self.dlg.traceButton.clicked.connect(self.trace_shape)
+        self.dlg.traceButton.clicked.connect(self.vtk_mouse_interactor_style.trace)
 
         # self.dlg.vertexTableView.setModel(self.vertexList)
         # self.dlg.vertexTableView.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)

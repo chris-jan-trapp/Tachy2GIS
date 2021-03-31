@@ -56,9 +56,9 @@ class SimpleRingBuffer(list):
 
         return one_way, other_way
 
-    def slice(self, one_end, contains, other_end):
-        slices = self.slices(one_end, other_end)
-        return next(filter(lambda s: contains in s, slices))
+    def slice(self, one_end, between, other_end):
+        one_way, other_way = self.slices(one_end, other_end)
+        return one_way if between in one_way else other_way
 
 
 class VtkLayer:
@@ -72,6 +72,7 @@ class VtkLayer:
         self.wkbTypeName = QgsWkbTypes.displayString(self.source_layer.wkbType())
         self.isMulti = QgsWkbTypes.isMultiType(self.source_layer.wkbType())
         self.extractor = VtkAnchorUpdater(layer=self.source_layer, geoType=self.geoType)
+        self.get_feature = self.extractor.features.get_common
         self.anchors = self.extractor.anchors
         self.geometries = self.extractor.geometries
         self.poly_data = self.extractor.poly_data
@@ -98,6 +99,7 @@ class VtkLayer:
 
     def set_pickability(self, pickable):
         self.pickable_actor.PickableOn() if pickable else self.pickable_actor.PickableOff()
+        setattr(self.pickable_actor, "features", self.extractor.features)
 
     def set_highlight(self, highlighted):
         raise NotImplementedError("Has to be implemented for each derived class")
@@ -603,25 +605,11 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
 
         # pick cell where point is picked
         cell_picker.Pick3DRay(picked, (0, 0, 0, 0), self.GetCurrentRenderer())
-        # cell_picked = cell_picker.GetPickPosition()
-        # print("vtkCellPicker picked: ", cell_picked)
-        ids = vtk.vtkIdList()
-        print(cell_picker.GetActor())
         if cell_picker.GetActor():
             picked_cell = cell_picker.GetCellId()
-            #print("vtk picked_cell: ", picked_cell)
-            #print("picked_actor GetInput(): ", picked_actor.GetMapper().GetInput().GetCellPoints(picked_cell, c))
             picked_cell_data = picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints().GetData()
             picked_cell_data = picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints().GetData()
-            #print(dir(picked_actor.GetMapper().GetInput().GetPolys()))
-            # print(picked_actor.GetMapper().GetInput().GetPolys().GetCellSize(picked_cell))
-            # print(ids)
-            #print(picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints())
             print("vTn: ", vtk_to_numpy(picked_cell_data))
-            #newIter = picked_actor.GetMapper().GetInput().GetPolys().NewIterator()
-            #print("NoP: ", picked_actor.GetMapper().GetInput().GetNumberOfVerts())
-
-
 
         # return if picked point already in vertices
         if picked in self.vertices:
@@ -638,24 +626,27 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         self.draw()
 
     def trace(self):
+        def deduplicate(seq):
+            seen = set()
+            seen_add = seen.add
+            return [x for x in seq if not (x in seen or seen_add(x))]
         # We get the last three picked vertices
         points = self.vertices[-3:]
-        if self.last_source & len(points) == 3:
-            """Now we want to get the segment that is defined by these three. For this we need the 
-            CELL representing the last touched geometry. 
-            We then get the vertices of that cell, simpleRingBuffer them and grab the segment with
-            segment = vertex_buffer.slice(*points) 
-            then we can:
-            self.vertices = self.vertices[:-3] + segment
-            
-            This will explode when the last three vertices have been picked from different features.
-            """
-            source_mapper = self.last_source.GetMapper()
-            point_data = source_mapper.GetInput()
-            # OK. And now the cell :(
-            # vertex_buffer = SimpleRingBuffer(self.last_source.)
-            #
-        # self.draw()
+        if self.last_source and len(points) == 3:
+            features = self.last_source.features
+            try:
+                feature = features.get_common(points)
+            except ValueError as error:
+                print(error)
+                return
+            feature = SimpleRingBuffer(feature)
+            trace = feature.slice(*points)
+            trace = deduplicate(trace)
+            if not trace[0] == points[0]:
+                trace.reverse()
+            print(f"We have {len(self.vertices)} and replace the last three with {len(trace)} traced ones.")
+            self.vertices = self.vertices[:-3] + trace
+            self.draw()
 
     def draw(self):
         for actor in self.actors:

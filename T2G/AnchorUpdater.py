@@ -147,19 +147,31 @@ def unpack_qgspoint(point):
         return point.x(), point.y(), 0.0
 
 
+class GeometryCache:
+    def __init__(self):
+        self.geometries = []
+
+    def get_common(self, picked):
+        candidate = list(filter(lambda feature: set(picked).issubset(feature), self.geometries))
+        if candidate:
+            return candidate[0]
+        raise ValueError(f"No common feature found for {picked}")
+
+    def reset(self):
+        self.geometries = []
+
+
 # TODO: Polygon holes get rendered as polygon, remove layer cache code, handle 2d geometries
 class VtkAnchorUpdater(AnchorUpdater):
-    layer_cache = {}
     poly_data = None
     anchors = None
+    features = GeometryCache()
 
     def startExtraction(self):
+        self.features.reset()
         if self.geoType == QgsWkbTypes.PolygonGeometry:
             geometries = list([feature.geometry() for feature in self.layer.getFeatures()])
-            self.signalAnchorCount.emit(len(geometries))
             active_layer_id = self.layer.id()
-            if active_layer_id not in self.layer_cache.keys():
-                pass
             qApp.processEvents()
             polies = vtk.vtkCellArray()
             anchors = vtk.vtkPoints()
@@ -168,31 +180,25 @@ class VtkAnchorUpdater(AnchorUpdater):
             geometries = unpack_multi_polygons(geometries)
             for geometry in geometries:
                 poly = vtk.vtkPolygon()
+                feature = []
                 for vertex in map(unpack_qgspoint, geometry):
                     poly.GetPointIds().InsertNextId(point_index)
                     point_index += 1
                     anchors.InsertNextPoint(*vertex)
-                    self.signalAnchorCount.emit(point_index)
-                    qApp.processEvents()
+                    feature.append(vertex)
                     if self.abort:
                         return
                 polies.InsertNextCell(poly)
-            poly_data = vtk.vtkPolyData()
-            poly_data.SetPoints(anchors)
-            poly_data.SetPolys(polies)
-
-            self.layer_cache[active_layer_id] = {'poly_data': poly_data, 'anchors': anchors}
-            # print('loaded cache')
-            self.poly_data = self.layer_cache[active_layer_id]['poly_data']
-            self.anchors = self.layer_cache[active_layer_id]['anchors']
+                self.features.geometries.append(feature)
+            self.poly_data = vtk.vtkPolyData()
+            self.poly_data.SetPoints(anchors)
+            self.poly_data.SetPolys(polies)
             self.polies = self.poly_data.GetPolys()
 
         if self.geoType == QgsWkbTypes.LineGeometry:
             geometries = list([feature.geometry() for feature in self.layer.getFeatures()])
             self.signalAnchorCount.emit(len(geometries))
             active_layer_id = self.layer.id()
-            if active_layer_id not in self.layer_cache.keys():
-                pass
             linePoints = vtk.vtkPoints()
             linePoints.SetDataTypeToDouble()
             cells = vtk.vtkCellArray()
@@ -200,27 +206,23 @@ class VtkAnchorUpdater(AnchorUpdater):
             index = 0
             for geometry in geometries:
                 polyLine = vtk.vtkPolyLine()
+                feature = []
                 for vertex in map(unpack_qgspoint, geometry):
                     polyLine.GetPointIds().InsertNextId(index)
                     linePoints.InsertNextPoint(*vertex)
                     index += 1
+                    feature.append(vertex)
                 cells.InsertNextCell(polyLine)
-
+                self.features.geometries.append(feature)
             polyData = vtk.vtkPolyData()
             polyData.SetPoints(linePoints)
             polyData.SetLines(cells)
-
-            self.layer_cache[active_layer_id] = {'poly_data': polyData, 'anchors': linePoints}
-            # print('loaded cache')
-            self.poly_data = self.layer_cache[active_layer_id]['poly_data']
-            self.anchors = self.layer_cache[active_layer_id]['anchors']
+            self.poly_data = polyData
 
         if self.geoType == QgsWkbTypes.PointGeometry:
             geometries = list([feature.geometry() for feature in self.layer.getFeatures()])
             self.signalAnchorCount.emit(len(geometries))
             active_layer_id = self.layer.id()
-            if active_layer_id not in self.layer_cache.keys():
-                pass
             points = vtk.vtkPoints()
             points.SetDataTypeToDouble()
             v_cells = vtk.vtkCellArray()
@@ -229,16 +231,11 @@ class VtkAnchorUpdater(AnchorUpdater):
                 for vertex in map(unpack_qgspoint, geometry):
                     pid = points.InsertNextPoint(*vertex)
                     v_cells.InsertNextCell(1, [pid])
-
             pointData = vtk.vtkPolyData()
             pointData.SetPoints(points)
             pointData.SetVerts(v_cells)
-            self.layer_cache[active_layer_id] = {'poly_data': pointData, 'anchors': points}
-            # print('loaded cache')
-            self.poly_data = self.layer_cache[active_layer_id]['poly_data']
-            self.anchors = self.layer_cache[active_layer_id]['anchors']
+            self.poly_data = pointData
 
-        self.signalFinished.emit  # unused
         return self.poly_data
 
 

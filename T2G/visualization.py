@@ -50,15 +50,20 @@ class SimpleRingBuffer(list):
     def slices(self, one_end, other_end):
         i_start = self.index(one_end)
         i_end = self.index(other_end)
+        left = min(i_start, i_end)
+        right = max(i_start, i_end)
 
-        one_way = [self[i] for i in range(i_start, i_end + 1)]
-        other_way = [self[i] for i in range(i_end, 2 * i_end + 1)]
+        cw_range = range(left, right + 1)
+        ccw_range = range(right, right + len(self) - left)
+
+        one_way = [self[i] for i in cw_range]
+        other_way = [self[i] for i in ccw_range]
 
         return one_way, other_way
 
     def slice(self, one_end, between, other_end):
-        one_way, other_way = self.slices(one_end, other_end)
-        return one_way if between in one_way else other_way
+        cw, ccw = self.slices(one_end, other_end)
+        return cw if between in cw else ccw
 
 
 class VtkLayer:
@@ -594,22 +599,11 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
     def OnRightButtonDown(self):
         clickPos = self.GetInteractor().GetEventPosition()
         picker = vtk.vtkPointPicker()
-        cell_picker = vtk.vtkCellPicker()
         picker.SetTolerance(100)
         picker.Pick(clickPos[0], clickPos[1], 0, self.GetCurrentRenderer())
         picked = picker.GetPickPosition()
         picked_actor = picker.GetActor()
         print("vtkPointPicker picked: ", picked)
-
-        #cell_picker.Pick(*picked, self.GetCurrentRenderer())
-
-        # pick cell where point is picked
-        cell_picker.Pick3DRay(picked, (0, 0, 0, 0), self.GetCurrentRenderer())
-        if cell_picker.GetActor():
-            picked_cell = cell_picker.GetCellId()
-            picked_cell_data = picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints().GetData()
-            picked_cell_data = picked_actor.GetMapper().GetInput().GetCell(picked_cell).GetPoints().GetData()
-            print("vTn: ", vtk_to_numpy(picked_cell_data))
 
         # return if picked point already in vertices
         if picked in self.vertices:

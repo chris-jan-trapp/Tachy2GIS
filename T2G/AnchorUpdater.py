@@ -45,6 +45,7 @@ class AnchorUpdater(QObject):
         self.abort = False
         self._mutex = QMutex()
         self.geometries = []
+        self.features = GeometryCache()
 
     ## A slot to receive the 'Abort' signal from the AnchorUpdateDialog.
     @pyqtSlot()
@@ -165,14 +166,13 @@ class GeometryCache:
 class VtkAnchorUpdater(AnchorUpdater):
     poly_data = None
     anchors = None
-    features = GeometryCache()
 
     def startExtraction(self):
         self.features.reset()
         if self.geoType == QgsWkbTypes.PolygonGeometry:
             geometries = list([feature.geometry() for feature in self.layer.getFeatures()])
-            active_layer_id = self.layer.id()
-            qApp.processEvents()
+            #active_layer_id = self.layer.id()
+            #qApp.processEvents()
             polies = vtk.vtkCellArray()
             anchors = vtk.vtkPoints()
             anchors.SetDataTypeToDouble()
@@ -193,12 +193,12 @@ class VtkAnchorUpdater(AnchorUpdater):
             self.poly_data = vtk.vtkPolyData()
             self.poly_data.SetPoints(anchors)
             self.poly_data.SetPolys(polies)
-            self.polies = self.poly_data.GetPolys()
+            #self.polies = self.poly_data.GetPolys()
 
         if self.geoType == QgsWkbTypes.LineGeometry:
             geometries = list([feature.geometry() for feature in self.layer.getFeatures()])
-            self.signalAnchorCount.emit(len(geometries))
-            active_layer_id = self.layer.id()
+            #self.signalAnchorCount.emit(len(geometries))
+            #active_layer_id = self.layer.id()
             linePoints = vtk.vtkPoints()
             linePoints.SetDataTypeToDouble()
             cells = vtk.vtkCellArray()
@@ -221,8 +221,8 @@ class VtkAnchorUpdater(AnchorUpdater):
 
         if self.geoType == QgsWkbTypes.PointGeometry:
             geometries = list([feature.geometry() for feature in self.layer.getFeatures()])
-            self.signalAnchorCount.emit(len(geometries))
-            active_layer_id = self.layer.id()
+            #self.signalAnchorCount.emit(len(geometries))
+            #active_layer_id = self.layer.id()
             points = vtk.vtkPoints()
             points.SetDataTypeToDouble()
             v_cells = vtk.vtkCellArray()

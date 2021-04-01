@@ -578,10 +578,6 @@ class Tachy2Gis:
                 if "⛅" in layer.layer().name():
                     self.vtk_widget.layers[layer.layer().id()].vtkActor.VisibilityOn()
                 elif layer.layer().id() not in self.vtk_widget.layers:
-                    #if "⛅" in layer.layer().name():
-                    #    self.vtk_widget.layers[layer.layer().id()].vtkActor.VisibilityOn()
-                    #    # self.loadPointCloud(QgsExpressionContextUtils.layerScope(layer.layer()).variable('cloud_path'), layer.layer().id())
-                    #else:
                     self.vtk_widget.switch_layer(layer.layer())
             else:  # remove actor from renderer and vtk_widget.layers{}
                 if layer.layer().id() in self.vtk_widget.layers:
@@ -595,7 +591,6 @@ class Tachy2Gis:
                     else:
                         self.vtk_widget.renderer.RemoveActor(self.vtk_widget.layers[layer.layer().id()].vtkActor)
                         self.vtk_widget.layers.pop(layer.layer().id())
-        # print("vtk_widget layers:\n", self.vtk_widget.layers)
         self.vtk_widget.refresh_content()
         self.setPickable()
 

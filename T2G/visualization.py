@@ -6,7 +6,6 @@ from qgis.utils import iface
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import qApp
-from vtk.util.numpy_support import vtk_to_numpy
 
 from random import random
 from .AnchorUpdater import VtkAnchorUpdater
@@ -29,7 +28,7 @@ COLOUR_SPACE = ['blanched_almond',
 
 CLOUD_MARKER = "⛅ "
 
-
+# todo: iface.activeLayer().renderer().symbols(QgsRenderContext())[0].color().getHsl()
 class ColourProvider:
     index = 0
     colours = COLOUR_SPACE
@@ -53,7 +52,7 @@ class SimpleRingBuffer(list):
         """
         i_start = self.index(one_end)
         i_end = self.index(other_end)
-        # we have the indeces, let's sort them
+        # we have the indices, let's sort them
         left = min(i_start, i_end)
         right = max(i_start, i_end)
         width = right - left
@@ -81,9 +80,9 @@ class VtkLayer:
         self.wkbTypeName = QgsWkbTypes.displayString(self.source_layer.wkbType())
         self.isMulti = QgsWkbTypes.isMultiType(self.source_layer.wkbType())
         self.extractor = VtkAnchorUpdater(layer=self.source_layer, geoType=self.geoType)
-        self.get_feature = self.extractor.features.get_common
+        # self.get_feature = self.extractor.features.get_common
         self.anchors = self.extractor.anchors
-        self.geometries = self.extractor.geometries
+        # self.geometries = self.extractor.geometries
         self.poly_data = self.extractor.poly_data
         # glyph3D object (cross)
         self.glyphPt = vtk.vtkPoints()
@@ -199,7 +198,6 @@ class MixinM:
 
 class VtkPointCloudLayer(VtkLayer):
     def __init__(self, cloud_file_name, qgis_id):
-        #self.geoType =
         cellIndex = 0
         points = vtk.vtkPoints()
         points.SetDataTypeToDouble()
@@ -228,7 +226,6 @@ class VtkPointCloudLayer(VtkLayer):
 
         self.vtkActor = pointActor
         self.pickable_actor = pointActor
-        #self.id = "⛅ " + basename(cloud_file_name)[0]
         self.id = qgis_id
 
     def set_highlight(self, highlighted):
@@ -237,10 +234,7 @@ class VtkPointCloudLayer(VtkLayer):
 
 class VtkPolyLayer(MixinSingle, Mixin2D, VtkLayer):
     def get_actors(self, colour):
-        # poly_data = self.anchor_updater.layer_cache[self.source_layer.id]['poly_data']
-        # poly_data = self.extractor.layer_cache[self.source_layer.id()]['poly_data']
         poly_data = self.extractor.startExtraction()
-        # print(self.poly_data)
 
         poly_mapper = vtk.vtkPolyDataMapper()
         tri_filter = vtk.vtkTriangleFilter()
@@ -608,6 +602,7 @@ class VtkMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         picked = picker.GetPickPosition()
         picked_actor = picker.GetActor()
         print("vtkPointPicker picked: ", picked)
+        #picked_actor.GetProperty().SetColor(vtk.vtkNamedColors().GetColor3d("Blue"))
 
         # return if picked point already in vertices
         if picked in self.vertices:

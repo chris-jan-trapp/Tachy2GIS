@@ -61,7 +61,7 @@ class SimpleRingBuffer(list):
         shifted = [self[i] for i in range(left, left + len(self))]
         # And split it at the right end
         inner = shifted[:width + 1]
-        outer = shifted[width:]
+        outer = shifted[width:] + shifted[0]
 
         return inner, outer
 

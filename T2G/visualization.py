@@ -48,18 +48,22 @@ class SimpleRingBuffer(list):
         return super(SimpleRingBuffer, self).__getitem__(item)
 
     def slices(self, one_end, other_end):
+        """Produces two slices delimited by the two items one_end and other_end.
+        Both slices contain both ends.
+        """
         i_start = self.index(one_end)
         i_end = self.index(other_end)
+        # we have the indeces, let's sort them
         left = min(i_start, i_end)
         right = max(i_start, i_end)
+        width = right - left
+        # we get a copy of our items that starts at the left end
+        shifted = [self[i] for i in range(left, left + len(self))]
+        # And split it at the right end
+        inner = shifted[:width + 1]
+        outer = shifted[width:]
 
-        cw_range = range(left, right + 1)
-        ccw_range = range(right, right + len(self) - left)
-
-        one_way = [self[i] for i in cw_range]
-        other_way = [self[i] for i in ccw_range]
-
-        return one_way, other_way
+        return inner, outer
 
     def slice(self, one_end, between, other_end):
         cw, ccw = self.slices(one_end, other_end)

@@ -1,6 +1,6 @@
 import vtk
 from qgis.core import Qgis, QgsFeature, QgsGeometry, QgsWkbTypes, QgsMessageLog, QgsVectorDataProvider, \
-    QgsVectorLayerUtils, QgsVectorLayer, QgsExpressionContextUtils, QgsProject
+    QgsVectorLayerUtils, QgsVectorLayer, QgsExpressionContextUtils, QgsProject, QgsRenderContext
 from qgis.gui import QgsAttributeDialog
 from qgis.utils import iface
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
@@ -127,6 +127,9 @@ class VtkLayer:
         if "LineString" in self.wkbTypeName and len(vertices) <= 1:
             iface.messageBar().pushMessage("Fehler: ", "Linien müssen mindestens 2 Punkte haben!", Qgis.Warning, 5)
             return -1
+        if isinstance(self, VtkPointCloudLayer):
+            iface.messageBar().pushMessage("Fehler: ", "Schreiben in PointCloud nicht möglich!", Qgis.Warning, 5)
+            return -1
         wktGeo = self.make_wkt(vertices)
         if isinstance(wktGeo, list):
             # This only happens for multiple single point geos ->
@@ -198,13 +201,14 @@ class MixinM:
 
 
 class VtkPointCloudLayer(VtkLayer):
-    def __init__(self, cloud_file_name, qgis_id):
+    def __init__(self, cloud_file_name, qgis_layer):
         cellIndex = 0
         points = vtk.vtkPoints()
         points.SetDataTypeToDouble()
         cells = vtk.vtkCellArray()
         colors = vtk.vtkUnsignedCharArray()
         colors.SetNumberOfComponents(3)
+        super().__init__(qgis_layer)
 
         with open(cloud_file_name, 'r', encoding="utf-8-sig") as file:
             for line in file:
@@ -227,7 +231,7 @@ class VtkPointCloudLayer(VtkLayer):
 
         self.vtkActor = pointActor
         self.pickable_actor = pointActor
-        self.id = qgis_id
+        self.id = qgis_layer.id()
 
     def set_highlight(self, highlighted):
         return
@@ -509,10 +513,12 @@ class VtkWidget(QVTKRenderWindowInteractor):
             if layer_id not in self.layers.keys():
                 layer_type = VtkWidget.layer_type_map[type_name]
                 created = layer_type(qgs_layer=qgis_layer)
-                created.update()
+                # created.update()
                 self.layers[layer_id] = created
                 for actor in created.get_actors(self.colour_provider.next()):
                     self.renderer.AddActor(actor)
+                # for actor in created.get_actors(qgis_layer.renderer().symbols(QgsRenderContext())[0].color().getRgb()[0:3]):
+                #     self.renderer.AddActor(actor)
         else:
             print(f"No class defined for {type_name}")
         self.refresh_content()

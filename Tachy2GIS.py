@@ -355,16 +355,16 @@ class Tachy2Gis:
             self.vtk_widget.renderer.ResetCameraClippingRange()
             self.vtk_widget.renderer.GetRenderWindow().Render()
 
-        else: # 1-8 last features
+        else:  # 1-8 last features
             if not feats:
                 self.dlg.zoomModeComboBox.setCurrentIndex(1)
                 self.autozoom(1)
                 return
             featIds = [f.id() for f in feats]
-            count = {2:1,
-                     3:2,
-                     4:4,
-                     5:8}
+            count = {2: 1,
+                     3: 2,
+                     4: 4,
+                     5: 8}
             zoom_to = count[index]
 
             buffered = sorted(filter(lambda id: id < 0, featIds))
@@ -451,9 +451,10 @@ class Tachy2Gis:
 
         pcLayer = QgsVectorLayer("PointZ", "⛅ " + basename(cloudFileName), "memory")
         QgsExpressionContextUtils.setLayerVariable(pcLayer, 'cloud_path', cloudFileName)
-        cloud_layer = VtkPointCloudLayer(cloudFileName, pcLayer.id())
+        cloud_layer = VtkPointCloudLayer(cloudFileName, pcLayer)
         self.vtk_widget.layers[cloud_layer.id] = cloud_layer
         self.vtk_widget.renderer.AddActor(cloud_layer.vtkActor)
+        self.vtk_widget.renderer.ResetCameraClippingRange()
         self.vtk_widget.renderer.GetRenderWindow().Render()
         QgsProject.instance().addMapLayer(pcLayer)
         del progress
@@ -592,6 +593,7 @@ class Tachy2Gis:
                         self.vtk_widget.renderer.RemoveActor(self.vtk_widget.layers[layer.layer().id()].vtkActor)
                         self.vtk_widget.layers.pop(layer.layer().id())
         self.vtk_widget.refresh_content()
+        self.vtk_widget.renderer.ResetCameraClippingRange()
         self.setPickable()
 
     # remove layers if they are not in the layer legend

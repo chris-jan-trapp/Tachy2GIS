@@ -1,19 +1,31 @@
-**Dependencies:** *Tachy2GIS reqires pyshp to run. If you don't have it already (test this by typing `import shapefile` in a python console), you can get it here: [https://github.com/GeospatialPython/pyshp] or via `pip`. Alternatively you can use pipenv to handle the dependencies for you, see the section **Developer Notes** further down for more info on this.*
+**Dependencies:** *Tachy2GIS 3D-Viewer requires vtk to run. If you don't have it already (test this by typing `import vtk` in a python console), see **Installation**. Alternatively you can use pipenv to handle the dependencies for you, see the section **Developer Notes** further down for more info on this.*
+
+*You need at least QGIS version 3.10.7. This is because there are issues in previous versions when creating geometry from Well-known text. Your Total Stations **Data Output** setting has to be set to `Interface` and the **GSI Mask** setting has to be set to `Mask2` to be able to read coordinates from GSI. To use Bluetooth, you need a Bluetooth driver like `Bluetooth Stack for Windows by Toshiba` that merges the input and output COM port into one.*
 
 **Restrictions:** *Tachy2GIS is at this moment restricted to Leica Totalstations and the Leica GSI 8/16 data format. It has been tested with the TPS400- and TS06-series. The functionality with other systems or formats has not been tested.*
 
-**Known Issues:** *There's a problem with "Map Refresh" in QGIS 3.0.3. Resulting from this the "Object Count" of a new and empty layer stays at "0" and you can't zoom in to the measured objects. As a workaround make a copy of the layer and zoom in then.*
+**Known Issues:** Points don't get rendered on certain integrated graphics cards. This can be fixed by removing all lines with RenderPointsAsSpheresOn() in `visualization.py`. Points will then be displayed as squares.
 
 **Funding:** *Free software isn't necessarily produced for free. The development of Tachy2GIS has been funded by the [Archeological Museum of Hamburg](https://amh.de/) and the [German Archeological Institute](https://www.dainst.org/). If you want to get into the boat, feel free to contact us.*
 
+## Installation
+
+#### Windows
+
+First, you have to install vtk. Open the OSGEO4W.bat in your main QGIS folder and type in `py3_env`. Then you can use pip to install vtk:
+
+`python -m pip install vtk` 
+
+Now you can either install Tachy2GIS 3D-Viewer directly from zip in QGIS, or unpack it into your QGIS Plugins folder (QGIS restart required): `%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins`
+
 # Tachy2GIS: Concepts and Architecture
 
-Tachy2GIS (henceforth 'T2G') enales you to create geometries directly form tachymeter input while at the same time adding vertices manually. Manually generated vertices snap to features that are already present, in order to avoid overlapping features or holes between directly adjactant geometries. T2G consists of four main elements:
+Tachy2GIS (henceforth 'T2G') enables you to create geometries directly from tachymeter input while at the same time adding vertices manually. Manually generated vertices snap to features that are already present, in order to avoid overlapping features or holes between directly adjacent geometries. T2G consists of four main elements:
 
 *   The main dialog window which allows to connect to a tachymeter, preview vertices that are generated and select the source layer
-*   The field dialog that allows editing of the atribute values of new geometries and the selection of the target layer. The concept of source- and targetlayer will be explained later
+*   The field dialog that allows editing of the attribute values of new geometries and the selection of the target layer. The concept of source- and targetlayer will be explained later
 *   The vertex picker map tool, that is used to add existing vertices to a new geometry by clicking on or near them
-*   The vertex list that works behind the scenes to make all the above possible. It handles vertex snapping, displaying of current vertices and export of gemetries.
+*   The vertex list that works behind the scenes to make all the above possible. It handles vertex snapping, displaying of current vertices and export of geometries.
 
 ## Source- and targetlayer
 

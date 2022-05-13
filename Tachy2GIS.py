@@ -21,6 +21,8 @@
  ***************************************************************************/
 """
 from os.path import basename
+
+#from T2G.gc_constants import TMC_DoMeasure
 from . import resources
 """
 import pydevd
@@ -57,8 +59,10 @@ from .T2G.geo_com import connect_beep
 from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkPointCloudLayer
 
 from tachyconnect.ReplyHandler import ReplyHandler
-from tachyconnect.ts_control import MessageQueue, Dispatcher
+from tachyconnect.ts_control import MessageQueue, Dispatcher, CommunicationConstants
 from tachyconnect.GSI_Parser import make_vertex
+from tachyconnect.TachyRequest import TMC_GetCoordinate, TMC_DoMeasure
+import tachyconnect.gc_constants as gc
 
 def make_axes_actor(scale, xyzLabels):
     axes = vtk.vtkAxesActor()
@@ -140,6 +144,8 @@ class Tachy2Gis:
         self.dispatcher = Dispatcher(MessageQueue(1),
                                      MessageQueue(7),
                                      self.reply_handler)
+        self.reply_handler.register_command(TMC_GetCoordinate, self.coordinates_received)
+        self.reply_handler.register_command(TMC_DoMeasure, self.request_coordinates)
 
         self.availability_watchdog = AvailabilityWatchdog()
         # todo: Order
@@ -156,8 +162,30 @@ class Tachy2Gis:
         # self.pollingThread.start()
         self.pluginIsActive = False
 
+    def request_coordinates(self, *args):
+        self.dispatcher.send(TMC_GetCoordinate(args=("1000", "1")).get_geocom_command())
+
+    def coordinates_received(self, *args):
+        print(args)
+        if args[0] == str(gc.GRC_OK):
+            # %R1P,0,0:RC,E[double],N[double],H[double],CoordTime[long],
+            # E-Cont[double],N-Cont[double],H-Cont[double],CoordContTime[long]
+            new_vtx = map(float, args[1:4])
+
+            self.vtk_mouse_interactor_style.add_vertex(new_vtx)
+            self.dlg.coords.setText(f"{new_vtx}")
+            self.vtk_mouse_interactor_style.draw()
+            self.autozoom(0)
+
+        #self.dispatcher.send(TMC_DoMeasure(args=(gc.TMC_MEASURE_PRG.TMC_CLEAR, gc.TMC_INCLINE_PRG.TMC_AUTO_INC)).get_geocom_command())
+
+    def trigger_measurement(self):
+        self.dispatcher.send(TMC_DoMeasure(args=(gc.TMC_MEASURE_PRG.TMC_DEF_DIST.value, gc.TMC_INCLINE_PRG.TMC_AUTO_INC.value)).get_geocom_command())
+
     def vertex_received(self, line):
         print(line)
+        if line.startswith(CommunicationConstants.GEOCOM_REPLY_PREFIX):
+            return
         new_vtx = make_vertex(line)
         self.vtk_mouse_interactor_style.add_vertex(new_vtx)
         self.dlg.coords.setText(f"{new_vtx}")
@@ -499,6 +527,7 @@ class Tachy2Gis:
         # self.dlg.request_mirror.clicked.connect(self.tachyReader.request_mirror_z)
         self.dlg.setRefHeight.returnPressed.connect(self.setRefHeight)
         self.vtk_mouse_interactor_style.point_added.signal.connect(self.point_added)
+        self.dlg.doMeasure.clicked.connect(self.trigger_measurement)
 
         self.dlg.logFileEdit.selectionChanged.connect(self.setLog)  # TODO: Only works by double clicking/dragging
 
@@ -534,7 +563,7 @@ class Tachy2Gis:
 
         self.dispatcher.non_requested_data.connect(self.vertex_received)
         self.dlg.tachy_connect_button.clicked.connect(self.dispatcher.hook_up)
-        
+
         # self.vtk_widget.resizeEvent().connect(self.renderer.resize)
         # Connect signals for existing layers
         self.connectMapLayers()
@@ -748,7 +777,7 @@ class Tachy2Gis:
 
             self.setupControls()
             # not implemented yet
-            self.dlg.setRefHeight.hide()
+            # self.dlg.setRefHeight.hide()
 
             self.availability_watchdog.start()
             # self.tachyReader.beginListening()

@@ -12,7 +12,7 @@ qgisMinimumVersion=3.0
 description=This plugin allows to create geometries directly with a connected tachymeter
 version=1.1.0
 author=Christian Trapp
-email=mail@christiantrapp.net
+email=tachy2gis@vzg.de
 
 about=This plugin allows interactive geometry creation with mouse and tachymeter. Additionally the mouse can be used to add exisisting vertices to the created geometries, allowing to avoid overlaps and holes in the topology. Geometries and metatdata are written to shapefiles.
 

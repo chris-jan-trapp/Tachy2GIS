@@ -33,7 +33,7 @@ try:
 except ConnectionRefusedError:
     pass
 """
-import os
+import os, sys, glob
 import gc
 from PyQt5.QtSerialPort import QSerialPortInfo, QSerialPort
 from PyQt5.QtWidgets import QAction, QHeaderView, QDialog, QFileDialog, QSizePolicy, QVBoxLayout, QLineEdit,\
@@ -49,14 +49,16 @@ from qgis.gui import QgsMapToolPan
 import vtk
 from PyQt5 import QtCore, QtWidgets
 
-from .T2G.TachyReader import TachyReader, AvailabilityWatchdog
+from .T2G.TachyReader import AvailabilityWatchdog
 from .FieldDialog import FieldDialog
 from .Tachy2GIS_dialog import Tachy2GisDialog
 # from .T2G.autoZoomer import ExtentProvider, AutoZoomer
 from .T2G.geo_com import connect_beep
-from .T2G.GSI_Parser import make_vertex
 from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkPointCloudLayer
 
+from tachyconnect.ReplyHandler import ReplyHandler
+from tachyconnect.ts_control import MessageQueue, Dispatcher
+from tachyconnect.GSI_Parser import make_vertex
 
 def make_axes_actor(scale, xyzLabels):
     axes = vtk.vtkAxesActor()
@@ -134,7 +136,11 @@ class Tachy2Gis:
         self.markerWidget.EnabledOn()
         self.markerWidget.InteractiveOff()
 
-        self.tachyReader = TachyReader(QSerialPort.Baud9600)
+        self.reply_handler = ReplyHandler()
+        self.dispatcher = Dispatcher(MessageQueue(1),
+                                     MessageQueue(7),
+                                     self.reply_handler)
+
         self.availability_watchdog = AvailabilityWatchdog()
         # todo: Order
         self.dlg.zoomModeComboBox.addItems(['Track last point',
@@ -151,6 +157,7 @@ class Tachy2Gis:
         self.pluginIsActive = False
 
     def vertex_received(self, line):
+        print(line)
         new_vtx = make_vertex(line)
         self.vtk_mouse_interactor_style.add_vertex(new_vtx)
         self.dlg.coords.setText(f"{new_vtx}")
@@ -164,7 +171,6 @@ class Tachy2Gis:
         self.dlg.tachy_connect_button.setToolTip(f"Verbunden mit {comName}")
 
     def tachyDisconnected(self, emit):
-        self.tachyReader.pollingTimer.stop()
         if not self.availability_watchdog.pollingTimer.isActive():
             self.availability_watchdog.start()
         self.dlg.tachy_connect_button.setText(emit)
@@ -237,7 +243,6 @@ class Tachy2Gis:
         self.dlg.loadPointCloud.clicked.disconnect()
         self.dlg.sourceLayerComboBox.layerChanged.disconnect()
         self.dlg.targetLayerComboBox.layerChanged.disconnect()
-        self.tachyReader.lineReceived.disconnect()
         self.dlg.zoomModeComboBox.activated.disconnect(self.autozoom)
         QgsProject.instance().layerTreeRoot().visibilityChanged.disconnect(self.update_renderer)
         QgsProject.instance().legendLayersAdded.disconnect(self.rerenderVtkLayer)
@@ -248,8 +253,10 @@ class Tachy2Gis:
         # self.dlg.deleteAllButton.clicked.disconnect()
         # self.vertexList.layoutChanged.disconnect()
 
+        self.dispatcher.non_requested_data.disconnect()
+
         self.availability_watchdog.shutDown()
-        self.tachyReader.shutDown()
+        self.dispatcher.shutDown()
         self.pluginIsActive = False
         gc.collect()
         print('Signals disconnected!')
@@ -273,8 +280,10 @@ class Tachy2Gis:
     def connectSerial(self):
         port = self.dlg.portComboBox.currentText()
         if not port == Tachy2Gis.NO_PORT:
-            self.tachyReader.setPort(port)
-            connect_beep(port)
+            pass
+            # TODO: How does tachyconnect handle this?
+            # self.tachyReader.setPort(port)
+            # connect_beep(port)
 
     # TODO: Log default path QgsProject.instance().homePath()?
     def setLog(self):
@@ -285,10 +294,11 @@ class Tachy2Gis:
                                                   '*.txt')[0]
         if logFileName == '':
             self.dlg.logFileEdit.clear()
-            self.tachyReader.hasLogFile = False
+            # TODO: Move logging to line received
+            # self.tachyReader.hasLogFile = False
             return
-        self.dlg.logFileEdit.setText(logFileName)
-        self.tachyReader.setLogfile(logFileName)
+        # self.dlg.logFileEdit.setText(logFileName)
+        # self.tachyReader.setLogfile(logFileName)
 
     def dumpEnabled(self):
         verticesAvailable = (len(self.vtk_mouse_interactor_style.vertices) > 0)
@@ -432,7 +442,8 @@ class Tachy2Gis:
         # self.tachyReader.setReflectorHeight(refHeight)
 
     def getRefHeight(self):
-        self.dlg.setRefHeight.setText(self.tachyReader.getRefHeight)
+        # self.dlg.setRefHeight.setText(self.tachyReader.getRefHeight)
+        pass
 
     # Testline XYZRGB: 32565837.246360727 5933518.657366993 2.063523623769514 255 255 255
     def loadPointCloud(self, cloudFileName=None):
@@ -485,9 +496,7 @@ class Tachy2Gis:
         """This method connects all controls in the UI to their callbacks.
         It is called in add_action"""
         self.dlg.closingPlugin.connect(self.onCloseCleanup)
-        self.dlg.tachy_connect_button.clicked.connect(self.tachyReader.hook_up)
         # self.dlg.request_mirror.clicked.connect(self.tachyReader.request_mirror_z)
-        self.tachyReader.mirror_z_received.connect(self.getRefHeight)
         self.dlg.setRefHeight.returnPressed.connect(self.setRefHeight)
         self.vtk_mouse_interactor_style.point_added.signal.connect(self.point_added)
 
@@ -521,11 +530,11 @@ class Tachy2Gis:
         self.dlg.zoomModeComboBox.activated.connect(self.autozoom)
         self.dlg.zoomModeComboBox.setCurrentIndex(6)  # start with autozoom off
 
-        self.tachyReader.lineReceived.connect(self.vertex_received)
-        self.tachyReader.serial_connected.connect(self.tachyConnected)
-        self.tachyReader.serial_disconnected.connect(self.tachyDisconnected)
         self.availability_watchdog.serial_available.connect(self.tachyAvailable)
 
+        self.dispatcher.non_requested_data.connect(self.vertex_received)
+        self.dlg.tachy_connect_button.clicked.connect(self.dispatcher.hook_up)
+        
         # self.vtk_widget.resizeEvent().connect(self.renderer.resize)
         # Connect signals for existing layers
         self.connectMapLayers()

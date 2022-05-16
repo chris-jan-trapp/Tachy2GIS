@@ -36,7 +36,7 @@ except ConnectionRefusedError:
     pass
 """
 import os, sys, glob
-import gc
+import gc as garbagecollector
 from PyQt5.QtSerialPort import QSerialPortInfo, QSerialPort
 from PyQt5.QtWidgets import QAction, QHeaderView, QDialog, QFileDialog, QSizePolicy, QVBoxLayout, QLineEdit,\
     QPushButton, QProgressDialog, QProgressBar, qApp
@@ -61,7 +61,8 @@ from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkPointCloud
 from tachyconnect.ReplyHandler import ReplyHandler
 from tachyconnect.ts_control import MessageQueue, Dispatcher, CommunicationConstants
 from tachyconnect.GSI_Parser import make_vertex
-from tachyconnect.TachyRequest import TMC_GetCoordinate, TMC_DoMeasure
+from tachyconnect.TachyRequest import TMC_GetCoordinate, TMC_DoMeasure, TMC_GetHeight
+from tachyconnect.TachyJoystick import TachyJoystick
 import tachyconnect.gc_constants as gc
 
 def make_axes_actor(scale, xyzLabels):
@@ -146,6 +147,10 @@ class Tachy2Gis:
                                      self.reply_handler)
         self.reply_handler.register_command(TMC_GetCoordinate, self.coordinates_received)
         self.reply_handler.register_command(TMC_DoMeasure, self.request_coordinates)
+        self.reply_handler.register_command(TMC_GetHeight, self.set_ref_height)
+
+        #tachyJoystick
+        self.tachy_joystick_dlg = TachyJoystick(self.dispatcher, self.dlg, Qt.Dialog | Qt.Tool)
 
         self.availability_watchdog = AvailabilityWatchdog()
         # todo: Order
@@ -166,11 +171,11 @@ class Tachy2Gis:
         self.dispatcher.send(TMC_GetCoordinate(args=("1000", "1")).get_geocom_command())
 
     def coordinates_received(self, *args):
-        print(args)
+        print("Args: ", args)
         if args[0] == str(gc.GRC_OK):
             # %R1P,0,0:RC,E[double],N[double],H[double],CoordTime[long],
             # E-Cont[double],N-Cont[double],H-Cont[double],CoordContTime[long]
-            new_vtx = map(float, args[1:4])
+            new_vtx = list(map(float, args[1:4]))
 
             self.vtk_mouse_interactor_style.add_vertex(new_vtx)
             self.dlg.coords.setText(f"{new_vtx}")
@@ -284,9 +289,9 @@ class Tachy2Gis:
         self.dispatcher.non_requested_data.disconnect()
 
         self.availability_watchdog.shutDown()
-        self.dispatcher.shutDown()
+        self.dispatcher.stop()
         self.pluginIsActive = False
-        gc.collect()
+        garbagecollector.collect()
         print('Signals disconnected!')
 
     # switch target layer to source layer when changing source layer
@@ -519,6 +524,17 @@ class Tachy2Gis:
 
         self.vtk_widget.refresh_content()
 
+    def request_ref_height(self):
+        print("Sent")
+        self.dispatcher.send(TMC_GetHeight().get_geocom_command())
+
+    def set_ref_height(self, *args):
+        print("Ref height args: ", args)
+        self.dlg.setRefHeight.setText(f'{float(args[-1]):.3f}')
+
+    def show_joystick(self):
+        self.tachy_joystick_dlg.show()
+
     # Interface code goes here:
     def setupControls(self):
         """This method connects all controls in the UI to their callbacks.
@@ -562,7 +578,9 @@ class Tachy2Gis:
         self.availability_watchdog.serial_available.connect(self.tachyAvailable)
 
         self.dispatcher.non_requested_data.connect(self.vertex_received)
+        self.dispatcher.serial_connected.connect(self.request_ref_height)
         self.dlg.tachy_connect_button.clicked.connect(self.dispatcher.hook_up)
+        self.dlg.tachyJoystick.clicked.connect(self.show_joystick)
 
         # self.vtk_widget.resizeEvent().connect(self.renderer.resize)
         # Connect signals for existing layers

@@ -34,7 +34,7 @@
      <number>6</number>
     </property>
     <item row="2" column="0" colspan="2">
-     <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0">
+     <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0">
       <property name="sizeConstraint">
        <enum>QLayout::SetDefaultConstraint</enum>
       </property>
@@ -58,10 +58,16 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="minimumSize">
+         <size>
+          <width>26</width>
+          <height>26</height>
+         </size>
+        </property>
         <property name="maximumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -83,13 +89,13 @@
         <property name="minimumSize">
          <size>
           <width>0</width>
-          <height>0</height>
+          <height>26</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
           <width>100</width>
-          <height>16777215</height>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -108,13 +114,13 @@
         <property name="minimumSize">
          <size>
           <width>100</width>
-          <height>0</height>
+          <height>26</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
           <width>200</width>
-          <height>16777215</height>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -136,13 +142,13 @@
         <property name="minimumSize">
          <size>
           <width>100</width>
-          <height>0</height>
+          <height>26</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
           <width>200</width>
-          <height>16777215</height>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -152,10 +158,16 @@
       </item>
       <item>
        <widget class="QPushButton" name="traceButton">
+        <property name="minimumSize">
+         <size>
+          <width>26</width>
+          <height>26</height>
+         </size>
+        </property>
         <property name="maximumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="text">
@@ -174,10 +186,16 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="minimumSize">
+         <size>
+          <width>26</width>
+          <height>26</height>
+         </size>
+        </property>
         <property name="maximumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -204,14 +222,14 @@
         </property>
         <property name="minimumSize">
          <size>
-          <width>0</width>
-          <height>0</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -230,10 +248,16 @@
       </item>
       <item>
        <widget class="QPushButton" name="doMeasure">
+        <property name="minimumSize">
+         <size>
+          <width>26</width>
+          <height>26</height>
+         </size>
+        </property>
         <property name="maximumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="font">
@@ -263,13 +287,13 @@
         <property name="minimumSize">
          <size>
           <width>0</width>
-          <height>0</height>
+          <height>26</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
           <width>16777215</width>
-          <height>16777215</height>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -291,10 +315,16 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>26</height>
+         </size>
+        </property>
         <property name="maximumSize">
          <size>
           <width>300</width>
-          <height>16777215</height>
+          <height>26</height>
          </size>
         </property>
         <property name="toolTip">
@@ -312,70 +342,17 @@
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="setRefHeight">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>50</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>50</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>Reflektorhöhe setzen und mit Enter bestätigen</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="loadPointCloud">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>24</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>24</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>PointCloud laden...</string>
-        </property>
-        <property name="text">
-         <string>⛅</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="tachyJoystick">
         <property name="minimumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
         </property>
         <property name="font">
@@ -392,6 +369,34 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="loadPointCloud">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>26</width>
+          <height>26</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>26</width>
+          <height>26</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>PointCloud laden...</string>
+        </property>
+        <property name="text">
+         <string>⛅</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="tachy_connect_button">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -399,17 +404,28 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="minimumSize">
+         <size>
+          <width>26</width>
+          <height>26</height>
+         </size>
+        </property>
         <property name="maximumSize">
          <size>
-          <width>24</width>
-          <height>24</height>
+          <width>26</width>
+          <height>26</height>
          </size>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI Emoji</family>
+         </font>
         </property>
         <property name="toolTip">
          <string>Tachy verbinden</string>
         </property>
         <property name="text">
-         <string>🔛</string>
+         <string>⚠️</string>
         </property>
        </widget>
       </item>

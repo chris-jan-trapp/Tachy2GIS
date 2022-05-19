@@ -39,8 +39,9 @@ import os, sys, glob
 import gc as garbagecollector
 from PyQt5.QtSerialPort import QSerialPortInfo, QSerialPort
 from PyQt5.QtWidgets import QAction, QHeaderView, QDialog, QFileDialog, QSizePolicy, QVBoxLayout, QLineEdit,\
-    QPushButton, QProgressDialog, QProgressBar, qApp
-from PyQt5.QtCore import QSettings, QItemSelectionModel, QTranslator, QCoreApplication, QThread, qVersion, Qt, QEvent, QObject
+    QPushButton, QProgressDialog, QProgressBar, qApp, QLabel
+from PyQt5.QtCore import QSettings, QItemSelectionModel, QTranslator, QCoreApplication, QThread, qVersion, Qt,\
+    QEvent, QObject, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon
 from qgis.utils import iface
 from qgis.core import Qgis, QgsMapLayerProxyModel, QgsProject, QgsMapLayerType, QgsWkbTypes, QgsLayerTreeGroup,\
@@ -61,7 +62,7 @@ from .T2G.visualization import VtkWidget, VtkMouseInteractorStyle, VtkPointCloud
 from tachyconnect.ReplyHandler import ReplyHandler
 from tachyconnect.ts_control import MessageQueue, Dispatcher, CommunicationConstants
 from tachyconnect.GSI_Parser import make_vertex
-from tachyconnect.TachyRequest import TMC_GetCoordinate, TMC_DoMeasure, TMC_GetHeight
+from tachyconnect.TachyRequest import TMC_GetCoordinate, TMC_DoMeasure, TMC_GetHeight, TMC_SetHeight
 from tachyconnect.TachyJoystick import TachyJoystick
 import tachyconnect.gc_constants as gc
 
@@ -87,6 +88,12 @@ def make_axes_actor(scale, xyzLabels):
 
 class Tachy2Gis:
     NO_PORT = 'Select tachymeter USB port'
+    REF_HEIGHT_PAUSED = '🟠'
+    REF_HEIGHT_DISCONNECTED = '🔴'
+    REF_HEIGHT_IDLE = '🟡'
+    REF_HEIGHT_CONNECTED = '🟢'
+    REF_HEIGHT_CHANGED = '⚠️'
+    SERIAL_CONNECTED = '🔗'
 
     """QGIS Plugin Implementation."""
     # Custom methods go here:
@@ -145,30 +152,50 @@ class Tachy2Gis:
         self.dispatcher = Dispatcher(MessageQueue(1),
                                      MessageQueue(7),
                                      self.reply_handler)
-        self.reply_handler.register_command(TMC_GetCoordinate, self.coordinates_received)
-        self.reply_handler.register_command(TMC_DoMeasure, self.request_coordinates)
-        self.reply_handler.register_command(TMC_GetHeight, self.set_ref_height)
+        # self.reply_handler.register_command(TMC_GetCoordinate, self.coordinates_received)
+        # self.reply_handler.register_command(TMC_DoMeasure, self.request_coordinates)
+        # self.reply_handler.register_command(TMC_GetHeight, self.dlg_set_ref_height)
+
 
         #tachyJoystick
         self.tachy_joystick_dlg = TachyJoystick(self.dispatcher, self.dlg, Qt.Dialog | Qt.Tool)
+        # custom QLineEdit
+        self.refHeightLineEdit = LineFocus()
+        self.refHeightLineEdit.hide()
+        self.refHeightLineEdit.setMinimumSize(50, 26)
+        self.refHeightLineEdit.setMaximumSize(50, 26)
+        self.refHeightLineEdit.setToolTip(self.tr("Reflektorhöhe eingeben und mit Enter bestätigen"))
+
+        # label for Refheight status
+        self.refHeightStatusLabel = QLabel()
+        self.refHeightStatusLabel.hide()
+        self.refHeightStatusLabel.setAlignment(Qt.AlignCenter)
+        self.refHeightStatusLabel.setMinimumSize(26, 26)
+        self.refHeightStatusLabel.setMaximumSize(26, 26)
+        self.refHeightStatusLabel.setText(self.REF_HEIGHT_DISCONNECTED)
+        self.refHeightStatusLabel.setToolTip(self.tr("Zeigt an, ob die Reflektorhöhe ausgelesen wird"))
 
         self.availability_watchdog = AvailabilityWatchdog()
-        # todo: Order
-        self.dlg.zoomModeComboBox.addItems(['Track last point',
-                                            'Layer',
-                                            'Last feature',
-                                            'Last 2 features',
-                                            'Last 4 features',
-                                            'Last 8 features',
-                                            'Off'
+        self.dlg.zoomModeComboBox.addItems([self.tr('Letzter Punkt'),
+                                            self.tr('Layer'),
+                                            self.tr('Letztes feature'),
+                                            self.tr('Letzte 2 features'),
+                                            self.tr('Letzte 4 features'),
+                                            self.tr('Letzte 8 features'),
+                                            self.tr('Aus')
                                             ])
+
+        self.refHeightStatus = RefHeightStatus()
+        self.refHeightPollingThread = QThread()
+        self.refHeightStatus.moveToThread(self.refHeightPollingThread)
+
         # self.pollingThread = QThread()
         # self.tachyReader.moveToThread(self.pollingThread)
         # self.pollingThread.start()
         self.pluginIsActive = False
 
     def request_coordinates(self, *args):
-        self.dispatcher.send(TMC_GetCoordinate(args=("1000", "1")).get_geocom_command())
+        self.dispatcher.send(TMC_GetCoordinate(args=('1000', '1')).get_geocom_command())
 
     def coordinates_received(self, *args):
         print("Args: ", args)
@@ -197,26 +224,40 @@ class Tachy2Gis:
         self.vtk_mouse_interactor_style.draw()
         self.autozoom(0)
 
-    def tachyConnected(self, emit, comName):
+    def tachy_connected(self, text, portName):
         if self.availability_watchdog.pollingTimer.isActive():
             self.availability_watchdog.shutDown()
-        self.dlg.tachy_connect_button.setText(emit)
-        self.dlg.tachy_connect_button.setToolTip(f"Verbunden mit {comName}")
+        self.dlg.tachy_connect_button.setText(text)
+        self.dlg.tachy_connect_button.setToolTip(self.tr(f"Verbunden mit {portName}"))
+        self.refHeightStatusLabel.setText(self.REF_HEIGHT_CONNECTED)
+        # show controls
+        self.refHeightLineEdit.show()
+        self.refHeightStatusLabel.show()
+        self.dlg.tachyJoystick.show()
+        # start requesting reflector height
+        self.refHeightStatus.start()
 
-    def tachyDisconnected(self, emit):
+    def tachy_disconnected(self, text, portName):
         if not self.availability_watchdog.pollingTimer.isActive():
             self.availability_watchdog.start()
-        self.dlg.tachy_connect_button.setText(emit)
-        self.dlg.tachy_connect_button.setToolTip("Keine Verbindung")
+        self.dlg.tachy_connect_button.setText(text)
+        self.dlg.tachy_connect_button.setToolTip(self.tr("Keine Verbindung"))
+        self.refHeightStatusLabel.setText(self.REF_HEIGHT_DISCONNECTED)
+        # hide controls when disconnected
+        self.refHeightLineEdit.hide()
+        self.refHeightStatusLabel.hide()
+        self.dlg.tachyJoystick.hide()
+        # stop requesting reflector height
+        self.refHeightStatus.stop()
 
-    def tachyAvailable(self, emit):
-        self.dlg.tachy_connect_button.setText(emit)
-        self.dlg.tachy_connect_button.setToolTip("Tachy verbinden")
+    def tachy_available(self, text):
+        self.dlg.tachy_connect_button.setText(text)
+        self.dlg.tachy_connect_button.setToolTip(self.tr("Tachy verbinden"))
 
     def dump(self):
         vertices = self.vtk_mouse_interactor_style.vertices
         if len(vertices) == 0:
-            iface.messageBar().pushMessage("Fehler: ", "Keine Punkte vorhanden!", Qgis.Warning, 5)
+            iface.messageBar().pushMessage(self.tr("Fehler: ", "Keine Punkte vorhanden!"), Qgis.Warning, 5)
             return
 
         targetLayer = self.dlg.targetLayerComboBox.currentLayer()
@@ -228,7 +269,6 @@ class Tachy2Gis:
         self.vtk_mouse_interactor_style.draw()
         # remove vtk layer and update renderer
         self.rerenderVtkLayer([targetLayer.id()])
-        # todo: autozoom after dump?
         self.autozoom(self.dlg.zoomModeComboBox.currentIndex())
 
     # Used after dump and layerRemoved/added signal which return the layer ids as list
@@ -270,7 +310,7 @@ class Tachy2Gis:
         self.dlg.traceButton.clicked.disconnect()
         self.dlg.deleteVertexButton.clicked.disconnect()
         self.vtk_mouse_interactor_style.point_added.signal.disconnect(self.point_added)
-        self.dlg.setRefHeight.returnPressed.disconnect()
+        #self.dlg.setRefHeight.returnPressed.disconnect()
         self.dlg.zoomResetButton.clicked.disconnect()
         self.availability_watchdog.serial_available.disconnect()
         self.dlg.loadPointCloud.clicked.disconnect()
@@ -290,6 +330,9 @@ class Tachy2Gis:
 
         self.availability_watchdog.shutDown()
         self.dispatcher.stop()
+        self.refHeightStatus.stop()
+        # todo?: needed?
+        self.refHeightPollingThread.quit()
         self.pluginIsActive = False
         garbagecollector.collect()
         print('Signals disconnected!')
@@ -321,7 +364,7 @@ class Tachy2Gis:
     # TODO: Log default path QgsProject.instance().homePath()?
     def setLog(self):
         logFileName = QFileDialog.getOpenFileName(None,
-                                                  'Log-Datei speichern...',
+                                                  self.tr('Log-Datei speichern...'),
                                                   QgsProject.instance().homePath(),
                                                   'Text (*.txt)',
                                                   '*.txt')[0]
@@ -470,8 +513,10 @@ class Tachy2Gis:
     def setCoords(self, coord):
         self.dlg.coords.setText(*coord)
 
+    # todo: old - remove
     def setRefHeight(self):
-        refHeight = self.dlg.setRefHeight.text()
+        pass
+        #refHeight = self.dlg.setRefHeight.text()
         # self.tachyReader.setReflectorHeight(refHeight)
 
     def getRefHeight(self):
@@ -482,7 +527,7 @@ class Tachy2Gis:
     def loadPointCloud(self, cloudFileName=None):
         if not cloudFileName:
             cloudFileName = QFileDialog.getOpenFileName(None,
-                                                        'PointCloud laden...',
+                                                        self.tr('PointCloud laden...'),
                                                         QgsProject.instance().homePath(),
                                                         'XYZRGB (*.xyz);;Text (*.txt)',
                                                         '*.xyz;;*.txt')[0]
@@ -525,15 +570,53 @@ class Tachy2Gis:
         self.vtk_widget.refresh_content()
 
     def request_ref_height(self):
-        print("Sent")
-        self.dispatcher.send(TMC_GetHeight().get_geocom_command())
+        self.dispatcher.send(TMC_GetHeight(args=()).get_geocom_command())
 
-    def set_ref_height(self, *args):
-        print("Ref height args: ", args)
-        self.dlg.setRefHeight.setText(f'{float(args[-1]):.3f}')
+    # read reflector height
+    def dlg_set_ref_height(self, *args):
+        refHeight = f'{float(args[-1][:6]):<06}'
+        if args[0] == str(gc.GRC_OK):
+            if self.refHeightLineEdit.text():
+                # check if ref height changed
+                if refHeight != self.refHeightLineEdit.text():
+                    self.refHeightStatusLabel.setText(self.REF_HEIGHT_CHANGED)
+                    iface.messageBar().pushMessage(self.tr("Warnung: "), self.tr("Reflektorhöhe wurde geändert!"), Qgis.Warning, 30)
+                    # todo?: stop poll and wait for new input?
+                    # give warning but show new ref height and continue
+                    self.refHeightLineEdit.setText(refHeight)
+                else:
+                    if self.refHeightStatusLabel.text() == self.REF_HEIGHT_PAUSED:
+                        self.refHeightStatusLabel.setText(self.REF_HEIGHT_IDLE)
+                    else:
+                        self.refHeightStatusLabel.setText(self.REF_HEIGHT_CONNECTED)
+                        self.refHeightLineEdit.setText(refHeight)
+            # put ref height into LineEdit if empty
+            else:
+                self.refHeightLineEdit.setText(f'{args[-1][:6]}')
+
+        else:
+            self.refHeightStatusLabel.setText(self.REF_HEIGHT_DISCONNECTED)
+            iface.messageBar().pushMessage(self.tr("Warnung: "), self.tr(f"Tachy Fehlercode: {args[0]}"), Qgis.Warning, 10)
+
+    # set reflector height on returnPressed
+    def set_ref_height(self):
+        try:
+            refHeight = f"{float(self.refHeightLineEdit.text().replace(',', '.')):<06}"
+            # format if user enters a single digit
+            self.refHeightLineEdit.setText(refHeight)
+        except:
+            iface.messageBar().pushMessage(self.tr("Fehler: "), self.tr("Ungültiger Wert"), Qgis.Critical, 10)
+            return
+        self.dispatcher.send(TMC_SetHeight(args = ([refHeight])).get_geocom_command())
+        # start ref height status poll again
+        self.refHeightStatus.start()
 
     def show_joystick(self):
         self.tachy_joystick_dlg.show()
+
+    def ref_height_stop_poll(self):
+        self.refHeightStatus.stop()
+        self.refHeightStatusLabel.setText(self.REF_HEIGHT_PAUSED)
 
     # Interface code goes here:
     def setupControls(self):
@@ -541,7 +624,18 @@ class Tachy2Gis:
         It is called in add_action"""
         self.dlg.closingPlugin.connect(self.onCloseCleanup)
         # self.dlg.request_mirror.clicked.connect(self.tachyReader.request_mirror_z)
-        self.dlg.setRefHeight.returnPressed.connect(self.setRefHeight)
+        # todo: remove from ui
+        # self.dlg.setRefHeight.returnPressed.connect(self.setRefHeight)
+
+        # register commands
+        self.reply_handler.register_command(TMC_GetCoordinate, self.coordinates_received)
+        self.reply_handler.register_command(TMC_DoMeasure, self.request_coordinates)
+        self.reply_handler.register_command(TMC_GetHeight, self.dlg_set_ref_height)
+
+        # stop polling on LineEdit focus
+        self.refHeightLineEdit.ref_height_stop_poll.connect(self.ref_height_stop_poll)
+        self.refHeightStatus.ref_height_get.connect(self.request_ref_height)
+        self.refHeightLineEdit.returnPressed.connect(self.set_ref_height)
         self.vtk_mouse_interactor_style.point_added.signal.connect(self.point_added)
         self.dlg.doMeasure.clicked.connect(self.trigger_measurement)
 
@@ -575,12 +669,18 @@ class Tachy2Gis:
         self.dlg.zoomModeComboBox.activated.connect(self.autozoom)
         self.dlg.zoomModeComboBox.setCurrentIndex(6)  # start with autozoom off
 
-        self.availability_watchdog.serial_available.connect(self.tachyAvailable)
+        self.availability_watchdog.serial_available.connect(self.tachy_available)
 
         self.dispatcher.non_requested_data.connect(self.vertex_received)
         self.dispatcher.serial_connected.connect(self.request_ref_height)
+        self.dispatcher.serial_connected.connect(self.tachy_connected)
+        self.dispatcher.serial_disconnected.connect(self.tachy_disconnected)
         self.dlg.tachy_connect_button.clicked.connect(self.dispatcher.hook_up)
         self.dlg.tachyJoystick.clicked.connect(self.show_joystick)
+
+        # custom QLineEdit with focus event
+        self.dlg.horizontalLayout.insertWidget(10, self.refHeightLineEdit)
+        self.dlg.horizontalLayout.insertWidget(11, self.refHeightStatusLabel)
 
         # self.vtk_widget.resizeEvent().connect(self.renderer.resize)
         # Connect signals for existing layers
@@ -794,8 +894,9 @@ class Tachy2Gis:
                 self.setupControls()
 
             self.setupControls()
-            # not implemented yet
-            # self.dlg.setRefHeight.hide()
+
+            # hide joystick until connected
+            self.dlg.tachyJoystick.hide()
 
             self.availability_watchdog.start()
             # self.tachyReader.beginListening()
@@ -805,3 +906,40 @@ class Tachy2Gis:
             self.resetVtkCameraTop()  # todo: resets with 1/-1 bounds because renderer was not yet interacted with
             self.update_renderer()
             self.dlg.show()
+
+
+# Custom QLineEdit with focusInEvent
+class LineFocus(QLineEdit):
+    ref_height_stop_poll = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+    def focusInEvent(self, event):
+        print("Stop")
+        self.ref_height_stop_poll.emit()
+        super(LineFocus, self).focusInEvent(event)
+
+
+# Polling for ref height
+class RefHeightStatus(QObject):
+    ref_height_get = pyqtSignal()
+    register_ref_height = pyqtSignal()
+
+    def __init__(self):
+        self.pollingTimer = QTimer()
+        self.pollingTimer.timeout.connect(self.poll)
+        super().__init__()
+
+    def start(self):
+        self.pollingTimer.start(2000)
+        self.register_ref_height.emit()
+        #self.parent.reply_handler.register_command(TMC_GetHeight, self.parent.dlg_set_ref_height)
+
+    def stop(self):
+        self.pollingTimer.stop()
+
+    def poll(self):
+        print("Ref height poll")
+        self.ref_height_get.emit()
+        #self.parent.request_ref_height()

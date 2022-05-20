@@ -20,7 +20,9 @@
  *                                                                         *
  ***************************************************************************/
 """
+from cmath import log
 from os.path import basename
+from unittest import result
 
 #from T2G.gc_constants import TMC_DoMeasure
 from . import resources
@@ -160,7 +162,7 @@ class Tachy2Gis:
         #tachyJoystick
         self.tachy_joystick_dlg = TachyJoystick(self.dispatcher, self.dlg, Qt.Dialog | Qt.Tool)
         # custom QLineEdit
-        self.refHeightLineEdit = LineFocus()
+        self.refHeightLineEdit = SignalizingLineEdit()
         self.refHeightLineEdit.hide()
         self.refHeightLineEdit.setMinimumSize(50, 26)
         self.refHeightLineEdit.setMaximumSize(50, 26)
@@ -199,7 +201,13 @@ class Tachy2Gis:
 
     def coordinates_received(self, *args):
         print("Args: ", args)
-        if args[0] == str(gc.GRC_OK):
+        log_file_name = self.dlg.select_log_file.toolTip()
+        if log_file_name and not log_file_name.startswith('Log-Datei'):
+            with open(log_file_name, 'a') as log_file:
+                log_file.write(f"{str(args)}\n")
+        retcode = int(args[0])
+
+        if retcode == gc.GRC_OK:
             # %R1P,0,0:RC,E[double],N[double],H[double],CoordTime[long],
             # E-Cont[double],N-Cont[double],H-Cont[double],CoordContTime[long]
             new_vtx = list(map(float, args[1:4]))
@@ -208,6 +216,10 @@ class Tachy2Gis:
             self.dlg.coords.setText(f"{new_vtx}")
             self.vtk_mouse_interactor_style.draw()
             self.autozoom(0)
+        else:
+            message = gc.MESSAGES[retcode]
+            self.dlg.coords.setText(message)
+            iface.messageBar().pushMessage(self.tr("Warnung: "), self.tr(f"Tachy Fehler: {message}"), Qgis.Warning, 10)
 
         #self.dispatcher.send(TMC_DoMeasure(args=(gc.TMC_MEASURE_PRG.TMC_CLEAR, gc.TMC_INCLINE_PRG.TMC_AUTO_INC)).get_geocom_command())
 
@@ -217,7 +229,11 @@ class Tachy2Gis:
     def vertex_received(self, line):
         print(line)
         if line.startswith(CommunicationConstants.GEOCOM_REPLY_PREFIX):
-            return
+                return
+        log_file_name = self.dlg.select_log_file.toolTip()
+        if log_file_name and not log_file_name.startswith('Log-Datei'):
+            with open(log_file_name, 'a') as log_file:
+                log_file.write(line)
         new_vtx = make_vertex(line)
         self.vtk_mouse_interactor_style.add_vertex(new_vtx)
         self.dlg.coords.setText(f"{new_vtx}")
@@ -257,7 +273,7 @@ class Tachy2Gis:
     def dump(self):
         vertices = self.vtk_mouse_interactor_style.vertices
         if len(vertices) == 0:
-            iface.messageBar().pushMessage(self.tr("Fehler: ", "Keine Punkte vorhanden!"), Qgis.Warning, 5)
+            iface.messageBar().pushMessage(self.tr("Fehler: "), self.tr("Keine Punkte vorhanden!"), Qgis.Warning, 5)
             return
 
         targetLayer = self.dlg.targetLayerComboBox.currentLayer()
@@ -305,7 +321,7 @@ class Tachy2Gis:
         self.dlg.closingPlugin.disconnect(self.onCloseCleanup)
         # disconnect setupControls
         self.dlg.tachy_connect_button.clicked.disconnect()
-        self.dlg.logFileEdit.selectionChanged.disconnect()
+        self.dlg.select_log_file.clicked.disconnect()
         self.dlg.dumpButton.clicked.disconnect()
         self.dlg.traceButton.clicked.disconnect()
         self.dlg.deleteVertexButton.clicked.disconnect()
@@ -362,18 +378,13 @@ class Tachy2Gis:
             # connect_beep(port)
 
     # TODO: Log default path QgsProject.instance().homePath()?
-    def setLog(self):
-        logFileName = QFileDialog.getOpenFileName(None,
+    def set_log(self):
+        logFileName = QFileDialog.getSaveFileName(None,
                                                   self.tr('Log-Datei speichern...'),
                                                   QgsProject.instance().homePath(),
                                                   'Text (*.txt)',
                                                   '*.txt')[0]
-        if logFileName == '':
-            self.dlg.logFileEdit.clear()
-            # TODO: Move logging to line received
-            # self.tachyReader.hasLogFile = False
-            return
-        # self.dlg.logFileEdit.setText(logFileName)
+        self.dlg.select_log_file.setToolTip(logFileName)
         # self.tachyReader.setLogfile(logFileName)
 
     def dumpEnabled(self):
@@ -575,7 +586,8 @@ class Tachy2Gis:
     # read reflector height
     def dlg_set_ref_height(self, *args):
         refHeight = f'{float(args[-1][:6]):<06}'
-        if args[0] == str(gc.GRC_OK):
+        retcode = int(args[0])
+        if retcode == gc.GRC_OK:
             if self.refHeightLineEdit.text():
                 # check if ref height changed
                 if refHeight != self.refHeightLineEdit.text():
@@ -596,7 +608,7 @@ class Tachy2Gis:
 
         else:
             self.refHeightStatusLabel.setText(self.REF_HEIGHT_DISCONNECTED)
-            iface.messageBar().pushMessage(self.tr("Warnung: "), self.tr(f"Tachy Fehlercode: {args[0]}"), Qgis.Warning, 10)
+            iface.messageBar().pushMessage(self.tr("Warnung: "), self.tr(f"Tachy Fehler: {gc.MESSAGES[retcode]}"), Qgis.Warning, 10)
 
     # set reflector height on returnPressed
     def set_ref_height(self):
@@ -623,23 +635,19 @@ class Tachy2Gis:
         """This method connects all controls in the UI to their callbacks.
         It is called in add_action"""
         self.dlg.closingPlugin.connect(self.onCloseCleanup)
-        # self.dlg.request_mirror.clicked.connect(self.tachyReader.request_mirror_z)
-        # todo: remove from ui
-        # self.dlg.setRefHeight.returnPressed.connect(self.setRefHeight)
 
         # register commands
         self.reply_handler.register_command(TMC_GetCoordinate, self.coordinates_received)
         self.reply_handler.register_command(TMC_DoMeasure, self.request_coordinates)
         self.reply_handler.register_command(TMC_GetHeight, self.dlg_set_ref_height)
 
+        self.dlg.select_log_file.clicked.connect(self.set_log)
         # stop polling on LineEdit focus
-        self.refHeightLineEdit.ref_height_stop_poll.connect(self.ref_height_stop_poll)
+        self.refHeightLineEdit.got_focus.connect(self.ref_height_stop_poll)
         self.refHeightStatus.ref_height_get.connect(self.request_ref_height)
         self.refHeightLineEdit.returnPressed.connect(self.set_ref_height)
         self.vtk_mouse_interactor_style.point_added.signal.connect(self.point_added)
         self.dlg.doMeasure.clicked.connect(self.trigger_measurement)
-
-        self.dlg.logFileEdit.selectionChanged.connect(self.setLog)  # TODO: Only works by double clicking/dragging
 
         # self.dlg.deleteAllButton.clicked.connect(self.clearCanvas)
         # self.dlg.finished.connect(self.mapTool.clear)
@@ -909,16 +917,13 @@ class Tachy2Gis:
 
 
 # Custom QLineEdit with focusInEvent
-class LineFocus(QLineEdit):
-    ref_height_stop_poll = pyqtSignal()
-
-    def __init__(self):
-        super().__init__()
+class SignalizingLineEdit(QLineEdit):
+    got_focus = pyqtSignal()
 
     def focusInEvent(self, event):
         print("Stop")
-        self.ref_height_stop_poll.emit()
-        super(LineFocus, self).focusInEvent(event)
+        self.got_focus.emit()
+        super(SignalizingLineEdit, self).focusInEvent(event)
 
 
 # Polling for ref height

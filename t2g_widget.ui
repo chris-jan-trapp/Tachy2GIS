@@ -308,36 +308,29 @@
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="logFileEdit">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
+       <widget class="QPushButton" name="select_log_file">
         <property name="minimumSize">
          <size>
-          <width>0</width>
+          <width>26</width>
           <height>26</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>300</width>
+          <width>26</width>
           <height>26</height>
          </size>
+        </property>
+        <property name="font">
+         <font>
+          <family>Segoe UI Emoji</family>
+         </font>
         </property>
         <property name="toolTip">
          <string>Log-Datei wählen...</string>
         </property>
-        <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-        </property>
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-        <property name="clearButtonEnabled">
-         <bool>false</bool>
+        <property name="text">
+         <string>📜</string>
         </property>
        </widget>
       </item>

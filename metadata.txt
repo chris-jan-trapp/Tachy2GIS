@@ -16,8 +16,8 @@ email=tachy2gis@vzg.de
 
 about=This plugin allows interactive geometry creation with mouse and tachymeter. Additionally the mouse can be used to add exisisting vertices to the created geometries, allowing to avoid overlaps and holes in the topology. Geometries and metatdata are written to shapefiles.
 
-tracker=https://github.com/Archaeological-Museum-Hamburg/Tachy2GIS/issues
-repository=https://github.com/Archaeological-Museum-Hamburg/Tachy2GIS
+tracker=https://github.com/gbv/Tachy2GIS/issues
+repository=https://github.com/gbv/Tachy2GIS
 # End of mandatory metadata
 
 # Recommended items:
@@ -28,7 +28,7 @@ repository=https://github.com/Archaeological-Museum-Hamburg/Tachy2GIS
 # Tags are comma separated with spaces allowed
 tags=digitizing,geometry,3d,shapefile,vector
 
-homepage=https://github.com/Archaeological-Museum-Hamburg/Tachy2GIS
+homepage=https://github.com/gbv/Tachy2GIS
 category=Plugins
 icon=icon.png
 # experimental flag

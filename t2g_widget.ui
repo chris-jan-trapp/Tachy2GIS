@@ -359,6 +359,9 @@
         <property name="text">
          <string>🕹</string>
         </property>
+        <property name="shortcut">
+         <string>Ctrl+Alt+J</string>
+        </property>
        </widget>
       </item>
       <item>

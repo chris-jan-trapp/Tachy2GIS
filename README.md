@@ -64,6 +64,19 @@ The main dialog window consists of a tool bar and a 3D map window. All icons use
   * 🔗 signifies an established connection
 
 
+## Hotkeys
+
+- `ctrl-Space`: Triggers a measurement.
+- `ctrl-alt-Return`: Dumps the current geometry and opens the attribute dialog
+- `ctrl-alt-Z`: Deletes the last added vertex
+- `ctrl-alt-J`: Opens the joystick interface:
+  - ⬆️⬇️⬅️➡️ are linked to the arrow keys
+  - Stop (🛑) is `space`
+  - Lock is `ctrl-alt-L`
+  - powersearch (🤖) is connected to `ctrl-alt-S`
+  - The window can be closed with `Return`
+
+
 ## Connecting a tachymeter
 
 The tachymeter connection is implemented as a polling background thread that is provided by the package [tachyconnect](https://pypi.org/project/tachyconnect/). 

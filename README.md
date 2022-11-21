@@ -13,7 +13,7 @@
 
 #### Windows
 
-First, you have to install [vtk](https://vtk.org/download/) as described on their [downloads page](https://vtk.org/download/). Once it is installad, you can open the OSGEO4W.bat in your main QGIS folder and type in `py3_env`. Then you can use pip to install vtk:
+Open the OSGEO4W.bat in your main QGIS folder and use pip to install [vtk] (https://pypi.org/project/vtk/):
 
 `python -m pip install vtk` 
 

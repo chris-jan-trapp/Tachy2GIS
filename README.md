@@ -7,13 +7,14 @@
 
 **Known Issues:** Points don't get rendered on certain integrated graphics cards. This can be fixed by removing all lines with RenderPointsAsSpheresOn() in `visualization.py`. Points will then be displayed as squares.
 
-**Funding:** *Free software isn't necessarily produced for free. The development of Tachy2GIS has been funded by the [Archeological Museum of Hamburg](https://amh.de/), the [institute for historical coastal research](https://nihk.de/) and the [German Archeological Institute](https://www.dainst.org/). If you want to get into the boat, feel free to contact us.*
+**Funding:** *Free software isn't necessarily produced for free. The development of Tachy2GIS has been funded by the [Archeological Museum of Hamburg](https://amh.de/), the [Lower Saxony Institute for Historical Coastal Research](https://nihk.de/) and the [German Archeological Institute](https://www.dainst.org/). If you want to get into the boat, feel free to contact us.*
 
 ## Installation
 
 #### Windows
 
-First, you have to install [vtk](https://vtk.org/download/) as described on their [downloads page](https://vtk.org/download/). Once it is installad, you can open the OSGEO4W.bat in your main QGIS folder and type in `py3_env`. Then you can use pip to install vtk:
+First, you have to install [vtk](https://vtk.org/).
+The best way to do this is via pip invoked from the OSGEO4W shell:
 
 `python -m pip install vtk` 
 
